@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, Square, Check, AudioWaveform, Clock, AlertCircle } from "lucide-react";
+import { Mic, Square, Check, AudioWaveform, Clock, AlertCircle, ShieldAlert, Sparkles } from "lucide-react";
 
 interface VoiceMemo {
   id?: number;
@@ -16,6 +16,7 @@ export default function VoiceMemoPanel() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<string>("prompt");
   const [memos, setMemos] = useState<VoiceMemo[]>([
     {
       time: "08:45 AM",
@@ -47,7 +48,31 @@ export default function VoiceMemoPanel() {
 
   useEffect(() => {
     fetchMemos();
+    if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: "microphone" as any })
+        .then((perm) => {
+          setPermissionStatus(perm.state);
+          perm.onchange = () => setPermissionStatus(perm.state);
+        })
+        .catch(() => {});
+    }
   }, []);
+
+  const requestMicPermission = async () => {
+    setErrorMessage(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setPermissionStatus("granted");
+      return true;
+    } catch (err: any) {
+      setPermissionStatus("denied");
+      setErrorMessage(
+        "Microphone access blocked. Click the lock/settings icon in your browser address bar or open macOS System Settings > Privacy & Security > Microphone to grant permission."
+      );
+      return false;
+    }
+  };
 
   const getBestMimeType = (): string => {
     if (typeof MediaRecorder === "undefined") return "";
@@ -73,6 +98,7 @@ export default function VoiceMemoPanel() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setPermissionStatus("granted");
       const mimeType = getBestMimeType();
       const options = mimeType ? { mimeType } : undefined;
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -143,9 +169,7 @@ export default function VoiceMemoPanel() {
           recognizer.onerror = () => {};
           recognizer.start();
           speechRecognitionRef.current = recognizer;
-        } catch (e) {
-          // Speech recognition optional
-        }
+        } catch (e) {}
       }
 
       mediaRecorder.start(250);
@@ -156,7 +180,8 @@ export default function VoiceMemoPanel() {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      setErrorMessage("Microphone access is disabled. Please allow microphone permission in macOS System Settings > Privacy & Security > Microphone.");
+      setPermissionStatus("denied");
+      setErrorMessage("Microphone access was denied. Please click 'ALLOW ACCESS' below to trigger the permission prompt.");
     }
   };
 
@@ -183,8 +208,43 @@ export default function VoiceMemoPanel() {
             VOICE MEMOS // BRAIN DUMP
           </span>
         </div>
-        <span className="text-xs font-mono text-[var(--text-muted)]">LOCAL STORAGE</span>
+        <div className="flex items-center space-x-2">
+          {permissionStatus === "granted" ? (
+            <span className="text-xs font-mono text-emerald-400 font-semibold flex items-center space-x-1">
+              <Check className="w-3 h-3" />
+              <span>MIC READY</span>
+            </span>
+          ) : (
+            <button
+              onClick={requestMicPermission}
+              className="text-xs font-mono text-[var(--accent-primary)] underline hover:text-white"
+            >
+              GRANT PERMISSION
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Permission Request Alert Banner */}
+      {permissionStatus !== "granted" && (
+        <div className="p-3.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--accent-ring)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center space-x-2.5">
+            <ShieldAlert className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-white">Microphone Permission Needed</div>
+              <div className="text-xs font-mono text-[var(--text-muted)]">
+                Allow microphone access to record quick audio thought dumps
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={requestMicPermission}
+            className="px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-black font-mono text-xs font-bold hover:scale-105 active:scale-95 transition whitespace-nowrap self-start sm:self-auto shadow-md"
+          >
+            ALLOW MIC ACCESS
+          </button>
+        </div>
+      )}
 
       {/* Record Controller */}
       <div className="p-3.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2.5">
@@ -221,7 +281,7 @@ export default function VoiceMemoPanel() {
 
         {/* Live spoken preview */}
         {isRecording && liveTranscript && (
-          <div className="p-2 rounded bg-black/40 border border-[var(--accent-ring)] text-xs text-[var(--accent-primary)] font-mono animate-fadeIn">
+          <div className="p-2.5 rounded bg-black/50 border border-[var(--accent-ring)] text-xs text-[var(--accent-primary)] font-mono animate-fadeIn">
             <span className="text-[var(--text-muted)] mr-1.5">[LIVE SPEECH]:</span>
             "{liveTranscript}"
           </div>
@@ -230,7 +290,15 @@ export default function VoiceMemoPanel() {
         {errorMessage && (
           <div className="p-2.5 rounded bg-rose-950/60 border border-rose-800/40 text-xs text-rose-300 flex items-start space-x-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
+            <div className="space-y-1">
+              <div>{errorMessage}</div>
+              <button
+                onClick={requestMicPermission}
+                className="underline font-bold text-white hover:text-[var(--accent-primary)]"
+              >
+                Click here to prompt again
+              </button>
+            </div>
           </div>
         )}
       </div>

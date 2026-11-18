@@ -1,11 +1,21 @@
 import Cocoa
 import WebKit
+import AVFoundation
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate {
     var window: NSWindow!
     var webView: WKWebView!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Explicitly trigger macOS System Microphone Permission Prompt
+        if #available(macOS 10.14, *) {
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            if status == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    NSLog("[DayPilot] System microphone permission result: \(granted)")
+                }
+            }
+        }
         let screenRect = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let windowWidth: CGFloat = min(1280, screenRect.width * 0.9)
         let windowHeight: CGFloat = min(840, screenRect.height * 0.9)
