@@ -445,31 +445,40 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
 
     # If media telemetry present, update media_bookmarks
     if payload.media_type and payload.series_title and payload.unit_label:
+        m_type = payload.media_type.upper().strip()
+        if m_type not in ('MANHWA', 'MANGA', 'SHOW', 'ANIME'):
+            m_type = "SHOW"
         cursor.execute("""
         INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(title) DO UPDATE SET
+            media_type = excluded.media_type,
             current_unit = excluded.current_unit,
-            timestamp_offset = excluded.timestamp_offset,
-            resume_url = excluded.resume_url,
+            timestamp_offset = CASE WHEN excluded.timestamp_offset IS NOT NULL AND excluded.timestamp_offset != '' THEN excluded.timestamp_offset ELSE media_bookmarks.timestamp_offset END,
+            resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
             last_updated = CURRENT_TIMESTAMP;
         """, (
-            payload.media_type,
-            payload.series_title,
-            payload.unit_label,
+            m_type,
+            payload.series_title.strip(),
+            payload.unit_label.strip(),
             payload.timestamp_offset,
             payload.url or ""
         ))
     elif payload.window_title:
-        title_raw = payload.window_title
+        title_raw = payload.window_title.strip()
         title_lower = title_raw.lower()
+        domain_str = (payload.domain or "").lower()
+        url_str = (payload.url or "")
         import re
-        chap_match = re.search(r'chapter\s*(\d+(?:\.\d+)?)', title_lower, re.IGNORECASE)
+
+        chap_match = re.search(r'(?:chapter|ch\.?)\s*(\d+(?:\.\d+)?)', title_lower, re.IGNORECASE)
+        season_ep_match = re.search(r'(?:s(\d+)\s*e(\d+)|season\s*(\d+).*?episode\s*(\d+))', title_lower, re.IGNORECASE)
         ep_match = re.search(r'(?:episode|ep\.?)\s*(\d+)', title_lower, re.IGNORECASE)
         
-        domain_str = (payload.domain or "").lower()
-        is_manhwa = any(k in title_lower or k in domain_str for k in ["manhwa", "manga", "comic", "asura", "flame", "toon", "reaper", "webtoon", "scan"])
-        is_anime = any(k in title_lower or k in domain_str for k in ["crunchyroll", "anime", "netflix", "aniwatch"])
+        is_manhwa = any(k in title_lower or k in domain_str for k in ["manhwa", "manga", "manhua", "comic", "asura", "flame", "toon", "reaper", "webtoon", "scan"])
+        is_anime = any(k in title_lower or k in domain_str for k in ["crunchyroll", "aniwatch", "hianime", "9anime", "gogoanime", "animepahe", "anime"])
+        is_show = any(k in title_lower or k in domain_str for k in ["netflix", "primevideo", "hotstar", "disneyplus", "hulu", "max.com", "appletv"])
+        is_youtube = ("youtube.com" in domain_str or "- youtube" in title_lower) and "music.youtube" not in domain_str
 
         if chap_match and is_manhwa:
             chap_num = chap_match.group(1)
@@ -480,23 +489,64 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
                 INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
                 VALUES ('MANHWA', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(title) DO UPDATE SET
+                    media_type = 'MANHWA',
                     current_unit = excluded.current_unit,
                     resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
                     last_updated = CURRENT_TIMESTAMP;
-                """, (series_name, f"Chapter {chap_num}", payload.url or ""))
-        elif ep_match and is_anime:
-            ep_num = ep_match.group(1)
-            parts = re.split(r'[-–|]', title_raw)
+                """, (series_name, f"Chapter {chap_num}", url_str))
+        elif (season_ep_match or ep_match) and is_anime:
+            unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}" if season_ep_match else f"Episode {ep_match.group(1)}"
+            t_clean = re.sub(r'^(?:watch\s+)', '', title_raw, flags=re.IGNORECASE)
+            t_clean = re.sub(r'(?:english\s+subbed|english\s+dubbed|on\s+hianime\.to|on\s+crunchyroll|\bon\s+[\w\.-]+)', '', t_clean, flags=re.IGNORECASE)
+            t_clean = re.sub(r'(?:s\d+\s*e\d+|season\s*\d+.*?episode\s*\d+|episode\s*\d+|ep\.?\s*\d+).*$', '', t_clean, flags=re.IGNORECASE)
+            parts = re.split(r'[-–|]', t_clean)
+            series_name = parts[0].strip()
+            if series_name:
+                cursor.execute("""
+                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
+                VALUES ('ANIME', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(title) DO UPDATE SET
+                    media_type = 'ANIME',
+                    current_unit = excluded.current_unit,
+                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
+                    last_updated = CURRENT_TIMESTAMP;
+                """, (series_name, unit_str, url_str))
+        elif (season_ep_match or ep_match) and is_show:
+            unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}" if season_ep_match else f"Episode {ep_match.group(1)}"
+            t_clean = re.sub(r'(?:-\s*netflix|-\s*prime\s*video|-\s*disney\+.*|-\s*hotstar).*$', '', title_raw, flags=re.IGNORECASE)
+            t_clean = re.sub(r'(?:s\d+\s*e\d+|season\s*\d+.*?episode\s*\d+|episode\s*\d+|ep\.?\s*\d+).*$', '', t_clean, flags=re.IGNORECASE)
+            parts = re.split(r'[-–|]', t_clean)
             series_name = parts[0].strip()
             if series_name:
                 cursor.execute("""
                 INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
                 VALUES ('SHOW', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(title) DO UPDATE SET
+                    media_type = 'SHOW',
                     current_unit = excluded.current_unit,
                     resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
                     last_updated = CURRENT_TIMESTAMP;
-                """, (series_name, f"Episode {ep_num}", payload.url or ""))
+                """, (series_name, unit_str, url_str))
+        elif is_youtube and len(title_raw) > 3:
+            cleaned_title = re.sub(r'\s*-\s*YouTube\s*$', '', title_raw, flags=re.IGNORECASE).strip()
+            unit_str = "Video"
+            if season_ep_match:
+                unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}"
+            elif ep_match:
+                unit_str = f"Episode {ep_match.group(1)}"
+            elif re.search(r'part\s*(\d+)', title_lower):
+                p_m = re.search(r'part\s*(\d+)', title_lower)
+                unit_str = f"Part {p_m.group(1)}"
+            if cleaned_title:
+                cursor.execute("""
+                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
+                VALUES ('SHOW', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(title) DO UPDATE SET
+                    media_type = 'SHOW',
+                    current_unit = excluded.current_unit,
+                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
+                    last_updated = CURRENT_TIMESTAMP;
+                """, (cleaned_title, unit_str, url_str))
 
     conn.commit()
     conn.close()

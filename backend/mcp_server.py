@@ -89,8 +89,9 @@ def get_daypilot_state() -> str:
     # Media / Leisure Bookmarks
     if isinstance(bookmarks, list) and bookmarks:
         output.append("\n## Media Radar")
-        for b in bookmarks[:2]:
-            output.append(f"- {b.get('title')} -> {b.get('current_unit')} ({b.get('resume_url')})")
+        for b in bookmarks[:4]:
+            offset_str = f" @ {b.get('timestamp_offset')}" if b.get('timestamp_offset') else ""
+            output.append(f"- [{b.get('media_type')}] {b.get('title')} -> {b.get('current_unit')}{offset_str} ({b.get('resume_url')})")
 
     return "\n".join(output)
 

@@ -10,6 +10,8 @@ import {
   GraduationCap,
   GitPullRequest,
   BookOpen,
+  Tv,
+  Film,
   Zap,
   Target,
   AlertTriangle,
@@ -49,10 +51,16 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
     url: "https://github.com/apache/shardingsphere/pull/40449"
   });
 
-  const [mediaItem, setMediaItem] = useState<{ title: string; subtitle: string; url: string }>({
-    title: "MANHWA // GENIUS SWORDSMAN",
-    subtitle: "Chapter 76 on ToonGod",
-    url: "https://www.toongod.org/webtoon/academys-genius-swordsman/chapter-76/"
+  const [mediaItem, setMediaItem] = useState<{
+    type?: string;
+    title: string;
+    subtitle: string;
+    url: string;
+  }>({
+    type: "MANHWA",
+    title: "RESUME // MANHWA",
+    subtitle: "Solo Leveling: Ragnarok (Chapter 37)",
+    url: "https://flamecomics.me/series/solo-leveling-ragnarok/chapter-37"
   });
 
   // Fetch live satellite targets from backend
@@ -88,9 +96,12 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
           const bookmarks = await bookmarksRes.json();
           if (Array.isArray(bookmarks) && bookmarks.length > 0) {
             const m = bookmarks[0];
+            const typeStr = m.media_type || "SHOW";
+            const timeStr = m.timestamp_offset ? ` • ${m.timestamp_offset}` : "";
             setMediaItem({
-              title: `RESUME // ${m.media_type}`,
-              subtitle: `${m.title} (${m.current_unit})`,
+              type: typeStr,
+              title: `RESUME // ${typeStr}`,
+              subtitle: `${m.title} (${m.current_unit}${timeStr})`,
               url: m.resume_url || ""
             });
           }
@@ -375,19 +386,32 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
         </div>
       </div>
 
-      {/* Satellite 3: BOTTOM (6 o'clock) -> Media Radar (Manhwa / Show) */}
+      {/* Satellite 3: BOTTOM (6 o'clock) -> Media Radar (Show / Anime / Manhwa) */}
       <div
         onClick={() => openUrl(mediaItem.url)}
         className="pointer-events-auto absolute bottom-8 sm:bottom-10 flex flex-col items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
       >
         {/* Laser Connector Line pointing up */}
         <div className="w-[1px] h-5 bg-gradient-to-t from-[#f59e0b] to-transparent opacity-40 group-hover:opacity-100 transition" />
-        <div className="px-3.5 py-1.5 rounded-full bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#f59e0b] flex items-center space-x-2 shadow-lg">
-          <BookOpen className="w-3.5 h-3.5 text-[#f59e0b]" />
-          <span className="text-xs font-mono font-semibold text-white group-hover:text-[#f59e0b] transition">
-            {mediaItem.subtitle}
-          </span>
-          <ExternalLink className="w-3 h-3 text-[#f59e0b] opacity-0 group-hover:opacity-100 transition" />
+        <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#f59e0b] flex items-center space-x-2.5 shadow-lg">
+          <div className="w-6 h-6 rounded-lg bg-[#f59e0b]/15 flex items-center justify-center shrink-0">
+            {mediaItem.type === "MANHWA" || mediaItem.type === "MANGA" ? (
+              <BookOpen className="w-3.5 h-3.5 text-[#f59e0b]" />
+            ) : mediaItem.type === "ANIME" ? (
+              <Film className="w-3.5 h-3.5 text-[#f59e0b]" />
+            ) : (
+              <Tv className="w-3.5 h-3.5 text-[#f59e0b]" />
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] font-mono tracking-widest text-[#f59e0b] uppercase font-bold flex items-center space-x-1">
+              <span>{mediaItem.title}</span>
+              <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+            </div>
+            <div className="text-xs font-semibold text-white truncate max-w-[180px] sm:max-w-[240px]">
+              {mediaItem.subtitle}
+            </div>
+          </div>
         </div>
       </div>
 

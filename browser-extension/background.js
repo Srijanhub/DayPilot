@@ -46,7 +46,7 @@ async function recordMediaEvent(tab, mediaPayload) {
     app_name: "Opera GX",
     window_title: tab.title || "",
     domain: url.hostname,
-    url: tab.url,
+    url: mediaPayload.resume_url || tab.url,
     duration_seconds: 5,
     idle_seconds: 0,
     media_type: mediaPayload.media_type,

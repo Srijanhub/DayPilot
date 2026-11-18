@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookOpen, Tv, ArrowUpRight, Bookmark, RefreshCw, ExternalLink } from "lucide-react";
+import { BookOpen, Tv, Film, ArrowUpRight, Bookmark, RefreshCw, ExternalLink } from "lucide-react";
 
 interface BookmarkItem {
   id: number;
@@ -92,8 +92,10 @@ export default function MediaResumePanel() {
               {/* Top Tape Header */}
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-mono tracking-widest text-[#f59e0b] font-semibold uppercase flex items-center space-x-1.5">
-                  {b.media_type === "MANHWA" ? (
+                  {b.media_type === "MANHWA" || b.media_type === "MANGA" ? (
                     <BookOpen className="w-3.5 h-3.5" />
+                  ) : b.media_type === "ANIME" ? (
+                    <Film className="w-3.5 h-3.5" />
                   ) : (
                     <Tv className="w-3.5 h-3.5" />
                   )}
