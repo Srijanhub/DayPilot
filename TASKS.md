@@ -1,5 +1,5 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P2-T01 | Last updated: 2026-11-18 10:37
+Status: IN PROGRESS | Current: P3-T01 | Last updated: 2026-11-18 10:38
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
@@ -20,19 +20,19 @@ Status: IN PROGRESS | Current: P2-T01 | Last updated: 2026-11-18 10:37
 - [x] Committed: `phase-1: flight deck 3d orb and dashboard shell`
 
 ## Phase 2: Local Backend, SQLite Storage & Context Classifier
-- [ ] P2-T01 Scaffold FastAPI backend on 127.0.0.1:4000 with strict CORS and SQLite WAL initialization
+- [x] P2-T01 Scaffold FastAPI backend on 127.0.0.1:4000 with strict CORS and SQLite WAL initialization
       Done when: Backend boots, `GET /api/context` returns status 200.
-- [ ] P2-T02 Implement SQLite schema (activity_events, media_bookmarks, voice_memos, daily_audits, music_preferences, settings)
+- [x] P2-T02 Implement SQLite schema (activity_events, media_bookmarks, voice_memos, daily_audits, music_preferences, settings)
       Done when: Tables and indexes verify cleanly on startup.
-- [ ] P2-T03 Implement Context Classifier with 120s hysteresis debounce logic and idle timeout filter
+- [x] P2-T03 Implement Context Classifier with 120s hysteresis debounce logic and idle timeout filter
       Done when: Unit tests pass for classifier transitions and debounce thresholds.
-- [ ] P2-T04 Implement Heartbeat Ingestion API (`POST /api/heartbeat`) and WebSocket state broadcast (`/ws/state`)
+- [x] P2-T04 Implement Heartbeat Ingestion API (`POST /api/heartbeat`) and WebSocket state broadcast (`/ws/state`)
       Done when: Ingested heartbeats update SQLite and push state to connected WebSocket clients.
-- [ ] P2-T05 Implement Manual Context Override API (`POST /api/context/override`)
+- [x] P2-T05 Implement Manual Context Override API (`POST /api/context/override`)
       Done when: Overriding mode locks context and notifies WebSocket.
 ### Phase 2 Gate
-- [ ] Python unit tests pass (pytest)
-- [ ] Committed: `phase-2: backend core, sqlite wal, and context classifier`
+- [x] Python unit tests pass (pytest)
+- [x] Committed: `phase-2: backend core, sqlite wal, and context classifier`
 
 ## Phase 3: Browser Extension (Manifest V3) & Media Scrapers
 - [ ] P3-T01 Scaffold Chrome Extension MV3 with service worker, alarms, and offline batch queue
