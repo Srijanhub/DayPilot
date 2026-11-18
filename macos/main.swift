@@ -77,15 +77,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
         decisionHandler(.grant)
     }
 
-    // Opens <a target="_blank"> links in the user's default browser (e.g. Opera GX)
+    // Specifically opens external links in Opera GX as default browser
+    private func openInOperaGX(url: URL) {
+        if let operaUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.operasoftware.OperaGX") {
+            let config = NSWorkspace.OpenConfiguration()
+            NSWorkspace.shared.open([url], withApplicationAt: operaUrl, configuration: config, completionHandler: nil)
+        } else {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            proc.arguments = ["-a", "Opera GX", url.absoluteString]
+            try? proc.run()
+        }
+    }
+
+    // Opens <a target="_blank"> links in Opera GX
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = navigationAction.request.url {
-            NSWorkspace.shared.open(url)
+            openInOperaGX(url: url)
         }
         return nil
     }
 
-    // Opens external links in default browser rather than navigating away inside the Flight Deck
+    // Opens external links in Opera GX rather than navigating away inside the Flight Deck
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = navigationAction.request.url {
             if let host = url.host, (host == "localhost" || host == "127.0.0.1") {
@@ -94,7 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
             }
 
             if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
-                NSWorkspace.shared.open(url)
+                openInOperaGX(url: url)
                 decisionHandler(.cancel)
                 return
             }

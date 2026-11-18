@@ -67,8 +67,11 @@ class OverridePayload(BaseModel):
 
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     init_db()
+    import asyncio
+    from history_syncer import run_periodic_history_sync
+    asyncio.create_task(run_periodic_history_sync(interval_seconds=1800))
 
 
 async def broadcast_state(event_type: str, data: Dict[str, Any]):
@@ -677,14 +680,27 @@ def get_music_suggestion():
     return suggestions.get(mode, suggestions["WORK"])
 
 
+@app.post("/api/bookmarks/sync-history")
+async def trigger_history_sync():
+    from history_syncer import sync_opera_gx_history
+    count = sync_opera_gx_history()
+    await broadcast_state("BOOKMARKS_UPDATED", {"synced_count": count})
+    return {"status": "ok", "synced_count": count}
+
+
 @app.post("/api/open-url")
 def open_system_url(payload: Dict[str, Any]):
     url = payload.get("url", "")
     if url and (url.startswith("http://") or url.startswith("https://")):
         import subprocess
         try:
+            # Default browser for DayPilot is explicitly Opera GX
+            res = subprocess.run(["open", "-a", "Opera GX", url], capture_output=True)
+            if res.returncode == 0:
+                return {"status": "ok", "url": url, "browser": "Opera GX"}
+            # Fallback to system open
             subprocess.Popen(["open", url])
-            return {"status": "ok", "url": url}
+            return {"status": "ok", "url": url, "browser": "default"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
     return {"status": "invalid_url"}
