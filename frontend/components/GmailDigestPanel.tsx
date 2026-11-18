@@ -1,42 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Mail, ExternalLink, Sparkles, CheckCircle, RefreshCw, Clock, FileText } from "lucide-react";
-
-interface PriorityEmail {
-  id: string;
-  from: string;
-  subject: string;
-  summary?: string;
-  snippet?: string;
-  time: string;
-  priority: string;
-  concern?: string;
-  url?: string;
-}
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 export default function GmailDigestPanel() {
-  const [emails, setEmails] = useState<PriorityEmail[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchEmails = () => {
-    setLoading(true);
-    fetch("http://127.0.0.1:4000/api/briefing/morning")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.priority_emails) {
-          setEmails(data.priority_emails);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchEmails();
-    const interval = setInterval(fetchEmails, 15000);
-    return () => clearInterval(interval);
-  }, []);
+  const { briefing, fetchBriefing, isBriefingLoading } = useFlightDeckStore();
+  const emails = briefing?.priority_emails || [];
 
   return (
     <div className="etched-panel rounded-xl p-5 space-y-4">
@@ -63,11 +33,11 @@ export default function GmailDigestPanel() {
             <ExternalLink className="w-2.5 h-2.5" />
           </a>
           <button
-            onClick={fetchEmails}
+            onClick={fetchBriefing}
             className="text-[var(--text-muted)] hover:text-white p-1"
             title="Refresh inbox summaries"
           >
-            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3 h-3 ${isBriefingLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>

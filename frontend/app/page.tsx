@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import CockpitHeader from "@/components/CockpitHeader";
 import FlightDeckOrb from "@/components/FlightDeckOrb";
 import DialRing from "@/components/DialRing";
@@ -17,51 +17,71 @@ import SpectrogramRibbon from "@/components/SpectrogramRibbon";
 import ActiveTabMonitorPanel from "@/components/ActiveTabMonitorPanel";
 import FlightDeckCopilot from "@/components/FlightDeckCopilot";
 import OrbTacticalHub from "@/components/OrbTacticalHub";
-import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
+import { WS_BASE } from "@/lib/api";
 
 export default function FlightDeckPage() {
-  const { mode, audioEnergy, isPhaseShifting, timelineSegments, setMode, setTimelineSegments } = useFlightDeckStore();
-  const [isBreathing, setIsBreathing] = React.useState(false);
+  const {
+    mode,
+    audioEnergy,
+    isPhaseShifting,
+    timelineSegments,
+    loadInitialData,
+    handleWebSocketMessage
+  } = useFlightDeckStore();
 
-  // Load live timeline segments from SQLite backend
+  const [isBreathing, setIsBreathing] = useState(false);
+  const [orbTelemetry, setOrbTelemetry] = useState({ fps: 60, dpr: 1.5 });
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // 1. Initial boot data fetch across all cached modules (single coordinated fetch)
   useEffect(() => {
-    const fetchTimeline = () => {
-      fetch("http://127.0.0.1:4000/api/timeline")
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setTimelineSegments(data);
+    loadInitialData();
+  }, [loadInitialData]);
+
+  // 2. Central WebSocket connection - invalidates Zustand cache on live events
+  useEffect(() => {
+    let reconnectTimeout: NodeJS.Timeout;
+    let isMounted = true;
+
+    const connectWs = () => {
+      try {
+        const ws = new WebSocket(`${WS_BASE}/ws/state`);
+        wsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            handleWebSocketMessage(payload);
+          } catch (err) {}
+        };
+
+        ws.onclose = () => {
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connectWs, 3000);
           }
-        })
-        .catch(() => {});
+        };
+
+        ws.onerror = () => {
+          ws.close();
+        };
+      } catch (e) {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWs, 3000);
+        }
+      }
     };
-    fetchTimeline();
-    const interval = setInterval(fetchTimeline, 10000);
-    return () => clearInterval(interval);
-  }, [setTimelineSegments]);
 
-  // Connect to local backend WebSocket for real-time telemetry updates
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket("ws://127.0.0.1:4000/ws/state");
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "MODE_CHANGE" || payload.type === "INITIAL_STATE") {
-            if (payload.data && payload.data.mode) {
-              setMode(payload.data.mode as FlightMode);
-            }
-          }
-        } catch (err) {}
-      };
-    } catch (e) {
-      // Backend offline, fallback to local state
-    }
+    connectWs();
+
     return () => {
-      if (ws) ws.close();
+      isMounted = false;
+      clearTimeout(reconnectTimeout);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, [setMode]);
+  }, [handleWebSocketMessage]);
 
   return (
     <main className="min-h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-primary)] relative select-none">
@@ -94,6 +114,7 @@ export default function FlightDeckPage() {
             audioEnergy={audioEnergy}
             isPhaseShifting={isPhaseShifting}
             isBreathing={isBreathing}
+            onTelemetryUpdate={setOrbTelemetry}
           />
 
           {/* 24-Hour Activity Dial Ring */}
@@ -111,7 +132,7 @@ export default function FlightDeckPage() {
           </div>
 
           <div className="absolute top-4 right-5 text-[10px] font-mono text-[var(--text-muted)]">
-            FPS: 60 • GPU DPR: 2.0 • SHADER: PERLIN_FRESNEL
+            FPS: {orbTelemetry.fps} • GPU DPR: {orbTelemetry.dpr.toFixed(1)} • SHADER: PERLIN_FRESNEL
           </div>
 
           <div className="absolute bottom-4 text-center font-mono text-xs text-[var(--text-muted)] pointer-events-none">

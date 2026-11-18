@@ -1,46 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { BookOpen, Tv, Film, ArrowUpRight, Bookmark, RefreshCw, ChevronDown, Layers } from "lucide-react";
-
-interface BookmarkItem {
-  id: number;
-  media_type: "MANHWA" | "MANGA" | "SHOW" | "ANIME";
-  title: string;
-  current_unit: string;
-  timestamp_offset: string | null;
-  resume_url: string;
-  last_updated: string;
-}
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
+import { daypilotApi } from "@/lib/api";
 
 type CategoryTab = "ALL" | "SHOWS" | "COMICS";
 
 export default function MediaResumePanel() {
-  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { bookmarks, fetchBookmarks, isBookmarksLoading } = useFlightDeckStore();
   const [activeTab, setActiveTab] = useState<CategoryTab>("ALL");
   const [visibleCount, setVisibleCount] = useState<number>(5);
-
-  const fetchBookmarks = async () => {
-    try {
-      const res = await fetch("http://127.0.0.1:4000/api/bookmarks");
-      if (res.ok) {
-        const data = await res.json();
-        setBookmarks(data);
-      }
-    } catch (err) {
-      // Backend offline fallback
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBookmarks();
-    // Poll every 5 seconds to catch live updates from Opera GX
-    const interval = setInterval(fetchBookmarks, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleResume = (url: string) => {
     if (!url) return;
@@ -50,15 +20,8 @@ export default function MediaResumePanel() {
       window.open(url, "_blank");
     } catch (e) {}
 
-    // 2. Direct macOS Darwin launcher targeting Opera GX
-    fetch("http://127.0.0.1:4000/api/open-url", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-DayPilot-Token": process.env.NEXT_PUBLIC_DAYPILOT_API_TOKEN || "daypilot_local_sec_994b7a2d"
-      },
-      body: JSON.stringify({ url })
-    }).catch(() => {});
+    // 2. Direct macOS Darwin launcher targeting Opera GX via API
+    daypilotApi.openUrl(url).catch(() => {});
   };
 
   const handleTabChange = (tab: CategoryTab) => {
@@ -105,7 +68,7 @@ export default function MediaResumePanel() {
             className="text-[var(--text-muted)] hover:text-white p-1 rounded hover:bg-[var(--bg-elevated)] transition"
             title="Refresh Bookmarks"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isBookmarksLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>

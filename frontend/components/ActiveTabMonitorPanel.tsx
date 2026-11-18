@@ -1,61 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Compass, ExternalLink, Globe, Monitor, Radio, Clock, ShieldCheck, Search } from "lucide-react";
-
-interface LiveTab {
-  is_active: boolean;
-  app_name: string;
-  window_title: string;
-  domain: string;
-  url: string;
-  category: "WORK" | "STUDY" | "RELAX" | "MANHWA" | "SHOWS";
-  dwell_seconds: number;
-  last_heartbeat: string;
-}
-
-interface TabHistoryItem {
-  title: string;
-  domain: string;
-  url: string;
-  category: string;
-  total_seconds: number;
-  formatted_time: string;
-  last_active: string;
-}
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 export default function ActiveTabMonitorPanel() {
-  const [liveTab, setLiveTab] = useState<LiveTab | null>(null);
-  const [history, setHistory] = useState<TabHistoryItem[]>([]);
+  const { liveTab, tabHistory: history } = useFlightDeckStore();
   const [filter, setFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  const fetchData = async () => {
-    try {
-      const [liveRes, histRes] = await Promise.all([
-        fetch("http://127.0.0.1:4000/api/tabs/live").catch(() => null),
-        fetch("http://127.0.0.1:4000/api/tabs/history").catch(() => null)
-      ]);
-      if (liveRes && liveRes.ok) {
-        const liveData = await liveRes.json();
-        setLiveTab(liveData);
-      }
-      if (histRes && histRes.ok) {
-        const histData = await histRes.json();
-        if (Array.isArray(histData)) {
-          setHistory(histData);
-        }
-      }
-    } catch (e) {
-      // Backend temporarily offline
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Determine current active item (either from live heartbeat or latest from history)
   const currentActiveTab = (liveTab && liveTab.is_active) ? liveTab : (history.length > 0 ? {
@@ -87,7 +39,7 @@ export default function ActiveTabMonitorPanel() {
     );
   });
 
-  const formatDwell = (secs: number) => {
+  const formatDwell = (secs: number = 0) => {
     const mins = Math.floor(secs / 60);
     const remainingSecs = secs % 60;
     return `${mins}m ${remainingSecs < 10 ? "0" : ""}${remainingSecs}s`;
@@ -136,7 +88,7 @@ export default function ActiveTabMonitorPanel() {
               <span>•</span>
               <span className="flex items-center space-x-1">
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Dwell: {formatDwell(currentActiveTab.dwell_seconds)}</span>
+                <span>Dwell: {formatDwell(currentActiveTab.dwell_seconds || 0)}</span>
               </span>
             </div>
           </div>

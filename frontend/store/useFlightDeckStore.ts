@@ -1,5 +1,14 @@
 import { create } from "zustand";
 import { TimelineSegment } from "@/components/DialRing";
+import {
+  daypilotApi,
+  MorningBriefing,
+  MediaBookmark,
+  VoiceMemo,
+  LiveTabInfo,
+  TabHistoryItem,
+  NightlyBriefing
+} from "@/lib/api";
 
 export type FlightMode = "WORK" | "STUDY" | "RELAX";
 export type OverrideMode = "AUTO" | "FORCE_WORK" | "FORCE_STUDY" | "FORCE_RELAX";
@@ -11,8 +20,18 @@ interface FlightDeckState {
   audioEnergy: number;
   isCommandPaletteOpen: boolean;
   isBootComplete: boolean;
+
+  // Cached Telemetry Stores (Centralized to eliminate redundant polling)
   timelineSegments: TimelineSegment[];
-  
+  briefing: MorningBriefing | null;
+  bookmarks: MediaBookmark[];
+  memos: VoiceMemo[];
+  liveTab: LiveTabInfo | null;
+  tabHistory: TabHistoryItem[];
+  nightlyBriefing: NightlyBriefing | null;
+  isBriefingLoading: boolean;
+  isBookmarksLoading: boolean;
+
   // Actions
   setMode: (mode: FlightMode) => void;
   setOverride: (override: OverrideMode) => void;
@@ -21,6 +40,18 @@ interface FlightDeckState {
   completeBoot: () => void;
   setTimelineSegments: (segments: TimelineSegment[]) => void;
   triggerPhaseShift: (newMode: FlightMode) => void;
+
+  // Cache Fetchers & Event-driven invalidators
+  loadInitialData: () => Promise<void>;
+  fetchBriefing: () => Promise<void>;
+  fetchBookmarks: () => Promise<void>;
+  refreshBriefing: () => Promise<void>;
+  refreshBookmarks: () => Promise<void>;
+  refreshLiveTab: () => Promise<void>;
+  refreshTimeline: () => Promise<void>;
+  refreshMemos: () => Promise<void>;
+  refreshNightlyBriefing: () => Promise<void>;
+  handleWebSocketMessage: (payload: any, data?: any) => void;
 }
 
 export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
@@ -30,13 +61,16 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   audioEnergy: 0.0,
   isCommandPaletteOpen: false,
   isBootComplete: false,
-  timelineSegments: [
-    { startHour: 9.0, endHour: 11.5, category: "WORK", label: "VS Code • daypilot implementation", duration: "2h 30m" },
-    { startHour: 11.5, endHour: 13.0, category: "STUDY", label: "BossCoder • Dynamic Programming Lab 4", duration: "1h 30m" },
-    { startHour: 13.0, endHour: 13.75, category: "MANHWA", label: "Omniscient Reader's Viewpoint • Ch 214", duration: "45m" },
-    { startHour: 14.0, endHour: 16.5, category: "WORK", label: "GitHub PR Review & Frontend Architecture", duration: "2h 30m" },
-    { startHour: 16.5, endHour: 17.5, category: "SHOWS", label: "Arcane Season 2 • Episode 4", duration: "1h 00m" }
-  ],
+
+  timelineSegments: [],
+  briefing: null,
+  bookmarks: [],
+  memos: [],
+  liveTab: null,
+  tabHistory: [],
+  nightlyBriefing: null,
+  isBriefingLoading: false,
+  isBookmarksLoading: false,
 
   setMode: (mode) => {
     document.body.setAttribute("data-mode", mode);
@@ -51,11 +85,134 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
 
   triggerPhaseShift: (newMode) => {
     set({ isPhaseShifting: true });
-    // Update data attribute for smooth CSS token transitions
     document.body.setAttribute("data-mode", newMode);
-
     setTimeout(() => {
       set({ mode: newMode, isPhaseShifting: false });
     }, 400);
+  },
+
+  loadInitialData: async () => {
+    try {
+      const [briefing, bookmarks, timeline, liveTab, tabHistory, memos, nightly] =
+        await Promise.allSettled([
+          daypilotApi.getMorningBriefing(),
+          daypilotApi.getBookmarks(),
+          daypilotApi.getTimeline(),
+          daypilotApi.getLiveTab(),
+          daypilotApi.getTabHistory(),
+          daypilotApi.getMemos(),
+          daypilotApi.getNightlyBriefing()
+        ]);
+
+      set({
+        briefing: briefing.status === "fulfilled" ? briefing.value : null,
+        bookmarks: bookmarks.status === "fulfilled" ? bookmarks.value : [],
+        timelineSegments:
+          timeline.status === "fulfilled" && timeline.value.length > 0
+            ? timeline.value
+            : get().timelineSegments,
+        liveTab: liveTab.status === "fulfilled" ? liveTab.value : null,
+        tabHistory: tabHistory.status === "fulfilled" ? tabHistory.value : [],
+        memos: memos.status === "fulfilled" ? memos.value : [],
+        nightlyBriefing: nightly.status === "fulfilled" ? nightly.value : null
+      });
+    } catch (e) {
+      // Backend offline or starting up
+    }
+  },
+
+  fetchBriefing: async () => {
+    set({ isBriefingLoading: true });
+    try {
+      const briefing = await daypilotApi.getMorningBriefing();
+      set({ briefing });
+    } catch (e) {
+    } finally {
+      set({ isBriefingLoading: false });
+    }
+  },
+
+  fetchBookmarks: async () => {
+    set({ isBookmarksLoading: true });
+    try {
+      const bookmarks = await daypilotApi.getBookmarks();
+      set({ bookmarks });
+    } catch (e) {
+    } finally {
+      set({ isBookmarksLoading: false });
+    }
+  },
+
+  refreshBriefing: async () => {
+    try {
+      const briefing = await daypilotApi.getMorningBriefing();
+      set({ briefing });
+    } catch (e) {}
+  },
+
+  refreshBookmarks: async () => {
+    try {
+      const bookmarks = await daypilotApi.getBookmarks();
+      set({ bookmarks });
+    } catch (e) {}
+  },
+
+  refreshLiveTab: async () => {
+    try {
+      const [liveTab, tabHistory] = await Promise.all([
+        daypilotApi.getLiveTab(),
+        daypilotApi.getTabHistory()
+      ]);
+      set({ liveTab, tabHistory });
+    } catch (e) {}
+  },
+
+  refreshTimeline: async () => {
+    try {
+      const timelineSegments = await daypilotApi.getTimeline();
+      if (Array.isArray(timelineSegments) && timelineSegments.length > 0) {
+        set({ timelineSegments });
+      }
+    } catch (e) {}
+  },
+
+  refreshMemos: async () => {
+    try {
+      const memos = await daypilotApi.getMemos();
+      set({ memos });
+    } catch (e) {}
+  },
+
+  refreshNightlyBriefing: async () => {
+    try {
+      const nightlyBriefing = await daypilotApi.getNightlyBriefing();
+      set({ nightlyBriefing });
+    } catch (e) {}
+  },
+
+  handleWebSocketMessage: (payload: any, maybeData?: any) => {
+    const type = typeof payload === "string" ? payload : payload?.type;
+    const data = typeof payload === "string" ? maybeData : payload?.data;
+
+    if (!type) return;
+
+    if (type === "MODE_CHANGE" || type === "INITIAL_STATE") {
+      if (data && data.mode) {
+        get().setMode(data.mode as FlightMode);
+      }
+    } else if (type === "TELEMETRY_SYNCED") {
+      get().refreshBriefing();
+      get().refreshBookmarks();
+      get().refreshTimeline();
+      get().refreshLiveTab();
+    } else if (
+      type === "GITHUB_UPDATED" ||
+      type === "BOSSCODER_UPDATED" ||
+      type === "EMAILS_UPDATED"
+    ) {
+      get().refreshBriefing();
+    } else if (type === "BOOKMARKS_UPDATED") {
+      get().refreshBookmarks();
+    }
   }
 }));

@@ -20,13 +20,14 @@ import {
   Sparkles
 } from "lucide-react";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
+import { daypilotApi } from "@/lib/api";
 
 interface OrbTacticalHubProps {
   onBreathingChange?: (isBreathing: boolean) => void;
 }
 
 export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProps) {
-  const { mode } = useFlightDeckStore();
+  const { mode, briefing, bookmarks } = useFlightDeckStore();
 
   // Pomodoro Focus Sprint State
   const [sprintDuration, setSprintDuration] = useState<number>(25 * 60); // 25 mins default
@@ -63,56 +64,40 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
     url: "https://flamecomics.me/series/solo-leveling-ragnarok/chapter-37"
   });
 
-  // Fetch live satellite targets from backend
+  // Derive live satellite targets from cached store (invalidated by WebSocket events)
   useEffect(() => {
-    const fetchTelemetry = async () => {
-      try {
-        const [briefingRes, bookmarksRes] = await Promise.all([
-          fetch("http://127.0.0.1:4000/api/briefing/morning").catch(() => null),
-          fetch("http://127.0.0.1:4000/api/bookmarks").catch(() => null)
-        ]);
+    if (briefing) {
+      if (briefing.bosscoder_alerts && briefing.bosscoder_alerts.length > 0) {
+        const b = briefing.bosscoder_alerts[0];
+        setBosscoderItem({
+          title: "DSA // BOSSCODER",
+          subtitle: b.title || "DSA Tutorial 11",
+          url: b.url || "https://school.bosscoderacademy.com/home"
+        });
+      }
+      const prs = briefing.github_notifications || briefing.github_prs;
+      if (prs && prs.length > 0) {
+        const g = prs[0];
+        setGithubItem({
+          title: "GITHUB // PR REVIEW",
+          subtitle: `${g.repo || g.title || "PR"} ${g.pr || g.number || ""}`,
+          url: g.url || "https://github.com/Srijanhub/DayPilot"
+        });
+      }
+    }
 
-        if (briefingRes && briefingRes.ok) {
-          const briefing = await briefingRes.json();
-          if (briefing.bosscoder_alerts && briefing.bosscoder_alerts.length > 0) {
-            const b = briefing.bosscoder_alerts[0];
-            setBosscoderItem({
-              title: "DSA // BOSSCODER",
-              subtitle: b.title || "DSA Tutorial 11",
-              url: b.url || "https://school.bosscoderacademy.com/home"
-            });
-          }
-          if (briefing.github_prs && briefing.github_prs.length > 0) {
-            const g = briefing.github_prs[0];
-            setGithubItem({
-              title: "GITHUB // PR REVIEW",
-              subtitle: `${g.repo} ${g.pr}`,
-              url: g.url || "https://github.com/Srijanhub/DayPilot"
-            });
-          }
-        }
-
-        if (bookmarksRes && bookmarksRes.ok) {
-          const bookmarks = await bookmarksRes.json();
-          if (Array.isArray(bookmarks) && bookmarks.length > 0) {
-            const m = bookmarks[0];
-            const typeStr = m.media_type || "SHOW";
-            const timeStr = m.timestamp_offset ? ` • ${m.timestamp_offset}` : "";
-            setMediaItem({
-              type: typeStr,
-              title: `RESUME // ${typeStr}`,
-              subtitle: `${m.title} (${m.current_unit}${timeStr})`,
-              url: m.resume_url || ""
-            });
-          }
-        }
-      } catch (e) {}
-    };
-
-    fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (bookmarks && Array.isArray(bookmarks) && bookmarks.length > 0) {
+      const m = bookmarks[0];
+      const typeStr = m.media_type || "SHOW";
+      const timeStr = m.timestamp_offset ? ` • ${m.timestamp_offset}` : "";
+      setMediaItem({
+        type: typeStr,
+        title: `RESUME // ${typeStr}`,
+        subtitle: `${m.title} (${m.current_unit}${timeStr})`,
+        url: m.resume_url || ""
+      });
+    }
+  }, [briefing, bookmarks]);
 
   // Web Audio chime generator
   const playChime = (freq = 440, type: OscillatorType = "sine") => {
@@ -198,14 +183,7 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
     try {
       window.open(url, "_blank");
     } catch (e) {}
-    fetch("http://127.0.0.1:4000/api/open-url", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-DayPilot-Token": process.env.NEXT_PUBLIC_DAYPILOT_API_TOKEN || "daypilot_local_sec_994b7a2d"
-      },
-      body: JSON.stringify({ url })
-    }).catch(() => {});
+    daypilotApi.openUrl(url).catch(() => {});
   };
 
   const formatTime = (secs: number) => {

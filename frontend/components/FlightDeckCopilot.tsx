@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MessageSquare, Send, X, Sparkles, Terminal, ChevronUp, Bot, ExternalLink, RefreshCw } from "lucide-react";
 import { useFlightDeckStore } from "@/store/useFlightDeckStore";
+import { daypilotApi } from "@/lib/api";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -67,27 +68,14 @@ export default function FlightDeckCopilot() {
         content: m.content
       }));
 
-      const res = await fetch("http://127.0.0.1:4000/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: query,
-          history: historyPayload
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const botMsg: ChatMessage = {
-          role: "assistant",
-          content: data.reply,
-          source: data.source,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        };
-        setMessages((prev) => [...prev, botMsg]);
-      } else {
-        throw new Error("Failed to send message");
-      }
+      const data = await daypilotApi.chat(query, historyPayload);
+      const botMsg: ChatMessage = {
+        role: "assistant",
+        content: data.reply,
+        source: data.source,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      };
+      setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
 import { Terminal, Shield, Zap, Sparkles, Command, RefreshCw } from "lucide-react";
+import { daypilotApi } from "@/lib/api";
 
 export default function CockpitHeader() {
   const { mode, override, triggerPhaseShift, setOverride, setCommandPaletteOpen } = useFlightDeckStore();
@@ -14,10 +15,8 @@ export default function CockpitHeader() {
     setIsSyncing(true);
     setSyncStatus("SYNCING...");
     try {
-      const res = await fetch("http://127.0.0.1:4000/api/sync/all", { method: "POST" });
-      if (res.ok) {
-        setSyncStatus("ALL SYNCED");
-      }
+      await daypilotApi.syncAll();
+      setSyncStatus("ALL SYNCED");
     } catch (e) {
       setSyncStatus("OFFLINE");
     } finally {
@@ -41,10 +40,12 @@ export default function CockpitHeader() {
   const handleModeChange = (targetMode: FlightMode) => {
     setOverride(`FORCE_${targetMode}` as any);
     triggerPhaseShift(targetMode);
+    daypilotApi.setOverride(`FORCE_${targetMode}`).catch(() => {});
   };
 
   const handleAutoToggle = () => {
     setOverride("AUTO");
+    daypilotApi.setOverride("AUTO").catch(() => {});
   };
 
   return (

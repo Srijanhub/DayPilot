@@ -1,62 +1,47 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import { Activity, CheckCircle2, Clock } from "lucide-react";
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 export default function SpectrogramRibbon() {
-  const [focusScore, setFocusScore] = useState<number>(88);
-  const [flightLog, setFlightLog] = useState<any[]>([]);
-  const [bars, setBars] = useState<any[]>([]);
+  const { timelineSegments, nightlyBriefing } = useFlightDeckStore();
+  const focusScore = nightlyBriefing?.focus_score ?? 88;
+  const flightLog = nightlyBriefing?.flight_log ?? [];
 
-  useEffect(() => {
-    // 1. Fetch nightly stats
-    fetch("http://127.0.0.1:4000/api/briefing/nightly")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.focus_score) setFocusScore(data.focus_score);
-        if (data.flight_log) setFlightLog(data.flight_log);
-      })
-      .catch(() => {});
+  const bars = useMemo(() => {
+    return Array.from({ length: 48 }).map((_, i) => {
+      const slotHour = i / 2;
+      let height = 15;
+      let color = "oklch(1 0 0 / 0.08)";
+      let category = "IDLE";
 
-    // 2. Fetch live timeline for the 48 half-hour slots
-    fetch("http://127.0.0.1:4000/api/timeline")
-      .then((res) => res.json())
-      .then((segments: any[]) => {
-        const slotBars = Array.from({ length: 48 }).map((_, i) => {
-          const slotHour = i / 2;
-          let height = 15;
-          let color = "oklch(1 0 0 / 0.08)";
-          let category = "IDLE";
-
-          for (const seg of segments) {
-            if (slotHour >= seg.startHour && slotHour <= seg.endHour) {
-              if (seg.category === "WORK") {
-                height = 85;
-                color = "oklch(0.85 0.18 200)";
-                category = "WORK";
-              } else if (seg.category === "STUDY") {
-                height = 75;
-                color = "oklch(0.74 0.18 155)";
-                category = "STUDY";
-              } else if (seg.category === "MANHWA") {
-                height = 50;
-                color = "oklch(0.68 0.21 15)";
-                category = "MANHWA";
-              } else if (seg.category === "SHOWS") {
-                height = 60;
-                color = "oklch(0.78 0.16 65)";
-                category = "SHOWS";
-              }
-              break;
-            }
+      for (const seg of timelineSegments) {
+        if (slotHour >= seg.startHour && slotHour <= seg.endHour) {
+          if (seg.category === "WORK") {
+            height = 85;
+            color = "oklch(0.85 0.18 200)";
+            category = "WORK";
+          } else if (seg.category === "STUDY") {
+            height = 75;
+            color = "oklch(0.74 0.18 155)";
+            category = "STUDY";
+          } else if (seg.category === "MANHWA") {
+            height = 50;
+            color = "oklch(0.68 0.21 15)";
+            category = "MANHWA";
+          } else if (seg.category === "SHOWS") {
+            height = 60;
+            color = "oklch(0.78 0.16 65)";
+            category = "SHOWS";
           }
+          break;
+        }
+      }
 
-          return { slotHour, height, color, category };
-        });
-        setBars(slotBars);
-      })
-      .catch(() => {});
-  }, []);
+      return { slotHour, height, color, category };
+    });
+  }, [timelineSegments]);
 
   return (
     <div className="etched-panel rounded-xl p-5 space-y-5">

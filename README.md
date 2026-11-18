@@ -71,7 +71,7 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 1. Open Opera GX and navigate to `opera://extensions`.
 2. Toggle on **Developer mode** in the top right corner.
 3. Click **Load unpacked** and select:
-   `/Users/srijanhalder/Desktop/Experiments/daypilot/browser-extension`
+   `./browser-extension` (or `<path-to-daypilot>/browser-extension`)
 4. The DayPilot HUD companion is now active in Opera GX!
 
 ---

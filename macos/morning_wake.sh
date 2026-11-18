@@ -7,7 +7,8 @@ echo "[$(date)] DayPilot Morning Ignition initiated..."
 # 1. Ensure backend is running
 if ! curl -s http://127.0.0.1:4000/api/context > /dev/null; then
     echo "Starting DayPilot backend..."
-    cd /Users/srijanhalder/Desktop/Experiments/daypilot/backend
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    cd "$SCRIPT_DIR/../backend"
     ./venv/bin/uvicorn app:app --host 127.0.0.1 --port 4000 &
     sleep 2
 fi

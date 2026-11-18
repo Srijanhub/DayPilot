@@ -1,35 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Sparkles, Clock, ExternalLink, Calendar, CheckCircle, RefreshCw } from "lucide-react";
-
-interface BriefingData {
-  morning_quote: string;
-  morning_quote_author: string;
-  priority_focus: string;
-  schedule_blocks: Array<{ time: string; task: string; mode: string; url?: string }>;
-  calendar_events?: Array<{ id: string; time: string; title: string; type: string; url?: string; concern?: string }>;
-}
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 export default function MorningBriefingPanel() {
-  const [briefing, setBriefing] = useState<BriefingData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { briefing, fetchBriefing, isBriefingLoading } = useFlightDeckStore();
   const [showLiveCalendar, setShowLiveCalendar] = useState(false);
-
-  const fetchBriefing = () => {
-    setLoading(true);
-    fetch("http://127.0.0.1:4000/api/briefing/morning")
-      .then((res) => res.json())
-      .then((data) => setBriefing(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchBriefing();
-    const interval = setInterval(fetchBriefing, 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="etched-panel rounded-xl p-5 flex flex-col justify-between space-y-5">
@@ -66,7 +43,7 @@ export default function MorningBriefingPanel() {
               className="text-[var(--text-muted)] hover:text-white p-1"
               title="Refresh mission plan"
             >
-              <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3 h-3 ${isBriefingLoading ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>

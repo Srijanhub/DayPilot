@@ -107,10 +107,65 @@ def init_db():
 
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_events(timestamp);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_category_timestamp ON activity_events(category, timestamp);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_timestamp_category ON activity_events(timestamp, category);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_bookmarks_title ON media_bookmarks(title);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_bookmarks_updated ON media_bookmarks(last_updated);")
 
     conn.commit()
     conn.close()
+
+
+def get_today_range():
+    """Returns (start_str, end_str) timestamps for today to enable index-backed sargable range queries."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return f"{today} 00:00:00", f"{today} 23:59:59"
+
+
+def upsert_bookmark(
+    media_type: str,
+    title: str,
+    current_unit: str,
+    resume_url: str,
+    timestamp_offset: Optional[str] = None
+) -> None:
+    """Unified upsert for media bookmarks with conflict resolution."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(title) DO UPDATE SET
+            media_type = excluded.media_type,
+            current_unit = excluded.current_unit,
+            timestamp_offset = CASE WHEN excluded.timestamp_offset IS NOT NULL AND excluded.timestamp_offset != '' THEN excluded.timestamp_offset ELSE media_bookmarks.timestamp_offset END,
+            resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
+            last_updated = CURRENT_TIMESTAMP;
+        """, (media_type, title, current_unit, timestamp_offset, resume_url))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def prune_media_bookmarks(limit: int = 50) -> int:
+    """Prunes media bookmarks to the top N most recently updated items."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        DELETE FROM media_bookmarks
+        WHERE id NOT IN (
+            SELECT id FROM media_bookmarks
+            ORDER BY last_updated DESC
+            LIMIT ?
+        );
+        """, (limit,))
+        deleted_count = cursor.rowcount
+        conn.commit()
+        return deleted_count
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

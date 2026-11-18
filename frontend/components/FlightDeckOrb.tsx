@@ -8,6 +8,7 @@ interface FlightDeckOrbProps {
   audioEnergy?: number; // 0.0 to 1.0 from visualizer
   isPhaseShifting?: boolean;
   isBreathing?: boolean;
+  onTelemetryUpdate?: (telemetry: { fps: number; dpr: number }) => void;
 }
 
 // Color palettes per mode (Core and Rim in RGB)
@@ -159,15 +160,17 @@ export default function FlightDeckOrb({
   mode = "WORK",
   audioEnergy = 0.0,
   isPhaseShifting = false,
-  isBreathing = false
+  isBreathing = false,
+  onTelemetryUpdate
 }: FlightDeckOrbProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const uniformsRef = useRef<any>(null);
   const breathingRef = useRef<boolean>(isBreathing);
+  const telemetryCallbackRef = useRef(onTelemetryUpdate);
 
   useEffect(() => {
-    breathingRef.current = isBreathing;
-  }, [isBreathing]);
+    telemetryCallbackRef.current = onTelemetryUpdate;
+  }, [onTelemetryUpdate]);
 
   // Cursor interpolation state
   const mouseState = useRef({
@@ -189,15 +192,22 @@ export default function FlightDeckOrb({
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
     camera.position.z = 7.5;
 
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
       powerPreference: "high-performance"
     });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(dpr);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(renderer.domElement);
+
+    // Initial telemetry announcement
+    telemetryCallbackRef.current?.({ fps: 60, dpr });
+
+    // Detect accessibility preference
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // 2. High-subdivision Icosahedron Geometry & Shader Material
     const geometry = new THREE.IcosahedronGeometry(2.2, 48);
@@ -205,7 +215,7 @@ export default function FlightDeckOrb({
     const initialPalette = PALETTES[mode] || PALETTES.WORK;
     const uniforms = {
       u_time: { value: 0 },
-      u_speed: { value: 0.55 },
+      u_speed: { value: prefersReducedMotion ? 0.05 : 0.55 },
       u_noiseFreq: { value: 0.75 },
       u_displacementAmp: { value: 0.28 },
       u_audioEnergy: { value: 0.0 },
@@ -229,6 +239,7 @@ export default function FlightDeckOrb({
 
     // 3. Mouse Movement Listener (Normalized [-1, 1])
     const handleMouseMove = (e: MouseEvent) => {
+      if (prefersReducedMotion) return;
       const rect = container.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
@@ -254,46 +265,79 @@ export default function FlightDeckOrb({
     };
     window.addEventListener("resize", handleResize);
 
-    // 5. Render Loop with Visibility Optimization
-    let isVisible = true;
-    const handleVisibility = () => {
-      isVisible = !document.hidden;
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
+    // 5. Render Loop with Complete Visibility-Pause Optimization & Real FPS Telemetry
     let animationFrameId: number;
+    let isLoopRunning = false;
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
     const clock = new THREE.Clock();
 
     const animate = () => {
-      animationFrameId = requestAnimationFrame(animate);
-      if (!isVisible) return;
+      if (document.hidden) {
+        isLoopRunning = false;
+        return;
+      }
+      isLoopRunning = true;
+
+      // Rolling FPS calculation
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        const measuredFps = Math.min(120, Math.round((frameCount * 1000) / (now - lastFpsTime)));
+        telemetryCallbackRef.current?.({ fps: measuredFps, dpr });
+        frameCount = 0;
+        lastFpsTime = now;
+      }
 
       const elapsedTime = clock.getElapsedTime();
       uniforms.u_time.value = elapsedTime;
 
-      // Smooth mouse lerp for magnetic tilt
-      const m = mouseState.current;
-      m.currentX += (m.targetX - m.currentX) * 0.05;
-      m.currentY += (m.targetY - m.currentY) * 0.05;
+      if (!prefersReducedMotion) {
+        // Smooth mouse lerp for magnetic tilt
+        const m = mouseState.current;
+        m.currentX += (m.targetX - m.currentX) * 0.05;
+        m.currentY += (m.targetY - m.currentY) * 0.05;
 
-      mesh.rotation.y = m.currentX * 0.4 + elapsedTime * 0.12;
-      mesh.rotation.x = -m.currentY * 0.4;
+        mesh.rotation.y = m.currentX * 0.4 + elapsedTime * 0.12;
+        mesh.rotation.x = -m.currentY * 0.4;
 
-      // Mouse speed adds to displacement amplitude, then decays
-      const speedBoost = Math.min(m.speed * 0.8, 0.4);
-      let baseAmp = 0.28;
-      if (breathingRef.current) {
-        // 4-second box breathing sine wave: expand on inhale, contract on exhale
-        const breath = Math.sin(elapsedTime * (Math.PI / 2.0)) * 0.12;
-        baseAmp = 0.32 + breath;
+        // Mouse speed adds to displacement amplitude, then decays
+        const speedBoost = Math.min(m.speed * 0.8, 0.4);
+        let baseAmp = 0.28;
+        if (breathingRef.current) {
+          const breath = Math.sin(elapsedTime * (Math.PI / 2.0)) * 0.12;
+          baseAmp = 0.32 + breath;
+        }
+        uniforms.u_displacementAmp.value = baseAmp + speedBoost;
+        m.speed *= 0.92;
+      } else {
+        mesh.rotation.y = 0;
+        mesh.rotation.x = 0;
+        uniforms.u_displacementAmp.value = 0.22;
       }
-      uniforms.u_displacementAmp.value = baseAmp + speedBoost;
-      m.speed *= 0.92; // Decay speed boost
 
       renderer.render(scene, camera);
+      animationFrameId = requestAnimationFrame(animate);
     };
 
-    animate();
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (isLoopRunning) {
+          cancelAnimationFrame(animationFrameId);
+          isLoopRunning = false;
+        }
+      } else {
+        if (!isLoopRunning) {
+          lastFpsTime = performance.now();
+          frameCount = 0;
+          animationFrameId = requestAnimationFrame(animate);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // Initial frame start
+    animationFrameId = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(animationFrameId);

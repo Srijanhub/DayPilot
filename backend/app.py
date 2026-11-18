@@ -10,12 +10,16 @@ import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from contextlib import asynccontextmanager
+import asyncio
+import httpx
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from database import get_db_connection, init_db
+from database import get_db_connection, init_db, get_today_range, upsert_bookmark, prune_media_bookmarks
+from media_parser import parse_media_info
 from classifier import ContextClassifier
 from collectors.briefing_engine import synthesize_morning_briefing
 from collectors.bosscoder import get_bosscoder_alerts
@@ -25,7 +29,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="DayPilot Engine", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Modern lifespan handler (replaces deprecated @app.on_event("startup"))
+    init_db()
+    from unified_syncer import sync_engine
+    sync_engine.set_broadcast_callback(broadcast_state)
+    sync_task = asyncio.create_task(sync_engine.start_background_loop())
+    yield
+    sync_task.cancel()
+    try:
+        await sync_task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="DayPilot Engine", version="1.0.0", lifespan=lifespan)
 
 # Strict CORS: Allow only localhost:3000 and browser extension origins
 app.add_middleware(
@@ -72,15 +92,6 @@ class OverridePayload(BaseModel):
     mode: str  # AUTO, FORCE_WORK, FORCE_STUDY, FORCE_RELAX
 
 
-@app.on_event("startup")
-async def on_startup():
-    init_db()
-    import asyncio
-    from unified_syncer import sync_engine
-    sync_engine.set_broadcast_callback(broadcast_state)
-    asyncio.create_task(sync_engine.start_background_loop())
-
-
 async def broadcast_state(event_type: str, data: Dict[str, Any]):
     message = json.dumps({"type": event_type, "data": data})
     disconnected = []
@@ -115,46 +126,50 @@ async def websocket_endpoint(websocket: WebSocket):
             active_websockets.remove(websocket)
 
 
+def query_live_tab() -> Dict[str, Any]:
+    """Single-connection helper for querying current active tab and dwell time."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT * FROM activity_events
+        ORDER BY id DESC LIMIT 1;
+        """)
+        row = cursor.fetchone()
+
+        if not row:
+            return {"is_active": False}
+
+        # Count consecutive heartbeats on same title/domain
+        cursor.execute("""
+        SELECT SUM(duration_seconds) as current_dwell
+        FROM (
+            SELECT duration_seconds, window_title
+            FROM activity_events
+            ORDER BY id DESC LIMIT 100
+        )
+        WHERE window_title = ?;
+        """, (row["window_title"],))
+        dwell_row = cursor.fetchone()
+        dwell_sec = dwell_row["current_dwell"] if dwell_row and dwell_row["current_dwell"] else 5
+
+        return {
+            "is_active": True,
+            "app_name": row["app_name"],
+            "window_title": row["window_title"] or "Active Window",
+            "domain": row["domain"] or "desktop",
+            "url": row["url"] or "",
+            "category": row["category"] or "WORK",
+            "dwell_seconds": dwell_sec,
+            "last_heartbeat": row["timestamp"]
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/api/tabs/live")
-def get_live_tab():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT * FROM activity_events
-    ORDER BY id DESC LIMIT 1;
-    """)
-    row = cursor.fetchone()
-    conn.close()
-
-    if not row:
-        return {"is_active": False}
-
-    # Count consecutive heartbeats on same title/domain
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT SUM(duration_seconds) as current_dwell
-    FROM (
-        SELECT duration_seconds, window_title
-        FROM activity_events
-        ORDER BY id DESC LIMIT 100
-    )
-    WHERE window_title = ?;
-    """, (row["window_title"],))
-    dwell_row = cursor.fetchone()
-    dwell_sec = dwell_row["current_dwell"] if dwell_row and dwell_row["current_dwell"] else 5
-    conn.close()
-
-    return {
-        "is_active": True,
-        "app_name": row["app_name"],
-        "window_title": row["window_title"] or "Active Window",
-        "domain": row["domain"] or "desktop",
-        "url": row["url"] or "",
-        "category": row["category"] or "WORK",
-        "dwell_seconds": dwell_sec,
-        "last_heartbeat": row["timestamp"]
-    }
+async def get_live_tab():
+    return query_live_tab()
 
 
 class ChatMessage(BaseModel):
@@ -167,10 +182,10 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-def handle_copilot_chat(req: ChatRequest):
+async def handle_copilot_chat(req: ChatRequest):
     """
     DayPilot AI Copilot chat handler with automatic real-time context injection.
-    Injects active Opera GX tab, mental mode, BossCoder courses, GitHub PRs, and emails.
+    Non-blocking async handler utilizing cached telemetry stores and httpx.
     """
     user_msg = req.message.strip()
     if not user_msg:
@@ -180,12 +195,13 @@ def handle_copilot_chat(req: ChatRequest):
     user_name = os.environ.get("USER_NAME", "Developer")
     gh_user = os.environ.get("GITHUB_USERNAME", "Developer")
 
-    # 1. Gather live DayPilot contexts
+    # 1. Gather live DayPilot contexts (non-blocking from sync engine cache)
+    from unified_syncer import sync_engine
     current_mode = classifier.committed_mode
-    active_tab = get_live_tab()
-    bosscoder_data = get_bosscoder_alerts()
-    github_data = get_github_notifications()
-    emails_data = get_priority_emails()
+    active_tab = query_live_tab()
+    bosscoder_data = sync_engine.bosscoder_data or get_bosscoder_alerts()
+    github_data = sync_engine.github_data or get_github_notifications()
+    emails_data = sync_engine.email_data or get_priority_emails()
 
     # Format context blocks
     active_tab_str = f"{active_tab.get('window_title', 'Unknown')} ({active_tab.get('domain', 'desktop')}) [Dwell: {active_tab.get('dwell_seconds', 0)}s]"
@@ -218,7 +234,6 @@ YOUR INSTRUCTIONS:
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if gemini_key:
         try:
-            import urllib.request
             gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
             
             contents = []
@@ -232,21 +247,24 @@ YOUR INSTRUCTIONS:
                 "contents": contents
             }
 
-            req_gem = urllib.request.Request(
-                gemini_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req_gem, timeout=12.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                reply_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                return {
-                    "reply": reply_text,
-                    "mode": current_mode,
-                    "active_tab": active_tab.get("window_title", ""),
-                    "source": "GEMINI_2.0_FLASH"
-                }
-        except Exception as e:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                resp = await client.post(
+                    gemini_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    reply_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return {
+                        "reply": reply_text,
+                        "mode": current_mode,
+                        "active_tab": active_tab.get("window_title", ""),
+                        "source": "GEMINI_2.0_FLASH"
+                    }
+        except Exception:
+            # Fallback if Gemini request times out or key error
+            pass
             # Fallback if Gemini request times out or key error
             pass
 
@@ -288,88 +306,138 @@ YOUR INSTRUCTIONS:
 @app.get("/api/tabs")
 @app.get("/api/tabs/history")
 def get_tabs():
+    start_ts, end_ts = get_today_range()
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT 
-        COALESCE(window_title, app_name) as title,
-        domain,
-        url,
-        category,
-        SUM(duration_seconds) as total_seconds,
-        MAX(timestamp) as last_active
-    FROM activity_events
-    WHERE date(timestamp) = date('now')
-    GROUP BY COALESCE(window_title, app_name), domain
-    ORDER BY total_seconds DESC;
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT 
+            COALESCE(window_title, app_name) as title,
+            domain,
+            url,
+            category,
+            SUM(duration_seconds) as total_seconds,
+            MAX(timestamp) as last_active
+        FROM activity_events
+        WHERE timestamp >= ? AND timestamp <= ?
+        GROUP BY COALESCE(window_title, app_name), domain
+        ORDER BY total_seconds DESC;
+        """, (start_ts, end_ts))
+        rows = cursor.fetchall()
 
-    results = []
-    for r in rows:
-        secs = r["total_seconds"] or 0
-        hrs = secs // 3600
-        mins = (secs % 3600) // 60
-        time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m {secs % 60}s"
+        results = []
+        for r in rows:
+            secs = r["total_seconds"] or 0
+            hrs = secs // 3600
+            mins = (secs % 3600) // 60
+            time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m {secs % 60}s"
 
-        results.append({
-            "title": r["title"] or "Untitled Tab",
-            "domain": r["domain"] or "local",
-            "url": r["url"] or "",
-            "category": r["category"] or "WORK",
-            "total_seconds": secs,
-            "formatted_time": time_str,
-            "last_active": r["last_active"]
-        })
-
-    return results
+            results.append({
+                "title": r["title"] or "Untitled Tab",
+                "domain": r["domain"] or "local",
+                "url": r["url"] or "",
+                "category": r["category"] or "WORK",
+                "total_seconds": secs,
+                "formatted_time": time_str,
+                "last_active": r["last_active"]
+            })
+        return results
+    finally:
+        conn.close()
 
 
 @app.get("/api/timeline")
 def get_timeline():
+    start_ts, end_ts = get_today_range()
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT timestamp, app_name, window_title, category, duration_seconds
-    FROM activity_events
-    WHERE date(timestamp) = date('now')
-    ORDER BY timestamp ASC;
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT timestamp, app_name, window_title, category, duration_seconds
+        FROM activity_events
+        WHERE timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp ASC;
+        """, (start_ts, end_ts))
+        rows = cursor.fetchall()
 
-    segments = []
-    # Build continuous segments from today's actual activity records
-    for row in rows:
-        try:
-            ts = datetime.fromisoformat(row["timestamp"])
-            start_hour = ts.hour + (ts.minute / 60.0)
-            dur_hours = row["duration_seconds"] / 3600.0
-            end_hour = min(24.0, start_hour + max(0.25, dur_hours))
-            label = row["window_title"] or row["app_name"]
-            category = row["category"] or "WORK"
-            if category == "RELAX" and ("chapter" in label.lower() or "manhwa" in label.lower()):
-                category = "MANHWA"
-            elif category == "RELAX" and ("episode" in label.lower() or "netflix" in label.lower()):
-                category = "SHOWS"
+        if not rows:
+            return []
+
+        # Merge consecutive heartbeats with the same category into real continuous sessions
+        sessions = []
+        current_session = None
+
+        for row in rows:
+            try:
+                ts = datetime.fromisoformat(row["timestamp"])
+                label = row["window_title"] or row["app_name"] or "Activity"
+                cat = row["category"] or "WORK"
+                if cat == "RELAX" and any(k in label.lower() for k in ["chapter", "manhwa", "manga", "toon"]):
+                    cat = "MANHWA"
+                elif cat == "RELAX" and any(k in label.lower() for k in ["episode", "season", "netflix", "crunchyroll"]):
+                    cat = "SHOWS"
+
+                dur_sec = max(5, row["duration_seconds"] or 5)
+                row_start = ts
+                row_end = datetime.fromtimestamp(ts.timestamp() + dur_sec)
+
+                if current_session is None:
+                    current_session = {
+                        "category": cat,
+                        "label": label[:45],
+                        "start_dt": row_start,
+                        "end_dt": row_end,
+                        "total_seconds": dur_sec,
+                        "title_counts": {label: 1}
+                    }
+                else:
+                    gap_seconds = (row_start - current_session["end_dt"]).total_seconds()
+                    # Merge if same category and gap <= 15 minutes (900s)
+                    if cat == current_session["category"] and gap_seconds <= 900:
+                        current_session["end_dt"] = max(current_session["end_dt"], row_end)
+                        current_session["total_seconds"] += dur_sec
+                        current_session["title_counts"][label] = current_session["title_counts"].get(label, 0) + 1
+                    else:
+                        sessions.append(current_session)
+                        current_session = {
+                            "category": cat,
+                            "label": label[:45],
+                            "start_dt": row_start,
+                            "end_dt": row_end,
+                            "total_seconds": dur_sec,
+                            "title_counts": {label: 1}
+                        }
+            except Exception:
+                continue
+
+        if current_session:
+            sessions.append(current_session)
+
+        # Build dial segments from merged real sessions
+        segments = []
+        for s in sessions:
+            start_hour = s["start_dt"].hour + (s["start_dt"].minute / 60.0) + (s["start_dt"].second / 3600.0)
+            end_hour = s["end_dt"].hour + (s["end_dt"].minute / 60.0) + (s["end_dt"].second / 3600.0)
+            if end_hour - start_hour < 0.17:  # minimum 10m visual thickness on 24h dial
+                end_hour = min(24.0, start_hour + 0.17)
+
+            primary_label = max(s["title_counts"].items(), key=lambda x: x[1])[0]
+            mins = int(s["total_seconds"] // 60)
+            hrs = mins // 60
+            rem_m = mins % 60
+            dur_str = f"{hrs}h {rem_m}m" if hrs > 0 else f"{mins}m"
 
             segments.append({
                 "startHour": round(start_hour, 2),
                 "endHour": round(end_hour, 2),
-                "category": category,
-                "label": label[:45],
-                "duration": f"{int(row['duration_seconds'] // 60)}m"
+                "category": s["category"],
+                "label": primary_label[:45],
+                "duration": dur_str
             })
-        except Exception:
-            continue
 
-    if not segments:
-        segments = [
-            {"startHour": 9.0, "endHour": 11.5, "category": "WORK", "label": "Active Work Session", "duration": "2h 30m"}
-        ]
-
-    return segments
+        return segments
+    finally:
+        conn.close()
 
 
 @app.get("/api/briefing/morning")
@@ -387,37 +455,40 @@ async def sync_all_connected_services():
 
 @app.get("/api/briefing/nightly")
 def get_nightly_briefing():
+    start_ts, end_ts = get_today_range()
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Query today's totals
-    cursor.execute("""
-    SELECT category, SUM(duration_seconds) as total_seconds
-    FROM activity_events
-    WHERE date(timestamp) = date('now')
-    GROUP BY category;
-    """)
-    totals = {row["category"]: row["total_seconds"] for row in cursor.fetchall()}
+        # Query today's totals using indexed timestamp range
+        cursor.execute("""
+        SELECT category, SUM(duration_seconds) as total_seconds
+        FROM activity_events
+        WHERE timestamp >= ? AND timestamp <= ?
+        GROUP BY category;
+        """, (start_ts, end_ts))
+        totals = {row["category"]: row["total_seconds"] for row in cursor.fetchall()}
 
-    # Query bookmarks
-    cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC LIMIT 50;")
-    bookmarks = [dict(r) for r in cursor.fetchall()]
+        # Query bookmarks
+        cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC LIMIT 50;")
+        bookmarks = [dict(r) for r in cursor.fetchall()]
 
-    # Query today's top activities for dynamic flight log
-    cursor.execute("""
-    SELECT 
-        COALESCE(window_title, app_name) as title,
-        category,
-        SUM(duration_seconds) as total_seconds,
-        MAX(timestamp) as last_seen
-    FROM activity_events
-    WHERE date(timestamp) = date('now')
-    GROUP BY COALESCE(window_title, app_name), category
-    ORDER BY total_seconds DESC
-    LIMIT 5;
-    """)
-    activity_rows = cursor.fetchall()
-    conn.close()
+        # Query today's top activities for dynamic flight log
+        cursor.execute("""
+        SELECT 
+            COALESCE(window_title, app_name) as title,
+            category,
+            SUM(duration_seconds) as total_seconds,
+            MAX(timestamp) as last_seen
+        FROM activity_events
+        WHERE timestamp >= ? AND timestamp <= ?
+        GROUP BY COALESCE(window_title, app_name), category
+        ORDER BY total_seconds DESC
+        LIMIT 5;
+        """, (start_ts, end_ts))
+        activity_rows = cursor.fetchall()
+    finally:
+        conn.close()
 
     total_work = totals.get("WORK", 0) + totals.get("STUDY", 0)
     total_relax = totals.get("RELAX", 0) + totals.get("LEISURE", 0)
@@ -494,141 +565,44 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
         idle_seconds=payload.idle_seconds
     )
 
-    # Ingest into SQLite database
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # If non-idle, record activity event
+    # Ingest into SQLite database if non-idle
     if payload.idle_seconds <= classifier.idle_timeout:
-        cursor.execute("""
-        INSERT INTO activity_events (app_name, window_title, domain, url, category, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """, (
-            payload.app_name,
-            payload.window_title,
-            payload.domain,
-            payload.url,
-            current_mode,
-            payload.duration_seconds
-        ))
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO activity_events (app_name, window_title, domain, url, category, duration_seconds)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """, (
+                payload.app_name,
+                payload.window_title,
+                payload.domain,
+                payload.url,
+                current_mode,
+                payload.duration_seconds
+            ))
+            conn.commit()
+        finally:
+            conn.close()
 
-    # If media telemetry present, update media_bookmarks
-    if payload.media_type and payload.series_title and payload.unit_label:
-        m_type = payload.media_type.upper().strip()
-        if m_type not in ('MANHWA', 'MANGA', 'SHOW', 'ANIME'):
-            m_type = "SHOW"
-        cursor.execute("""
-        INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(title) DO UPDATE SET
-            media_type = excluded.media_type,
-            current_unit = excluded.current_unit,
-            timestamp_offset = CASE WHEN excluded.timestamp_offset IS NOT NULL AND excluded.timestamp_offset != '' THEN excluded.timestamp_offset ELSE media_bookmarks.timestamp_offset END,
-            resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
-            last_updated = CURRENT_TIMESTAMP;
-        """, (
-            m_type,
-            payload.series_title.strip(),
-            payload.unit_label.strip(),
-            payload.timestamp_offset,
-            payload.url or ""
-        ))
-    elif payload.window_title:
-        title_raw = payload.window_title.strip()
-        title_lower = title_raw.lower()
-        domain_str = (payload.domain or "").lower()
-        url_str = (payload.url or "")
-        import re
-
-        chap_match = re.search(r'(?:chapter|ch\.?)\s*(\d+(?:\.\d+)?)', title_lower, re.IGNORECASE)
-        season_ep_match = re.search(r'(?:s(\d+)\s*e(\d+)|season\s*(\d+).*?episode\s*(\d+))', title_lower, re.IGNORECASE)
-        ep_match = re.search(r'(?:episode|ep\.?)\s*(\d+)', title_lower, re.IGNORECASE)
-        
-        is_manhwa = any(k in title_lower or k in domain_str for k in ["manhwa", "manga", "manhua", "comic", "asura", "flame", "toon", "reaper", "webtoon", "scan"])
-        is_anime = any(k in title_lower or k in domain_str for k in ["crunchyroll", "aniwatch", "hianime", "9anime", "gogoanime", "animepahe", "anime"])
-        is_show = any(k in title_lower or k in domain_str for k in ["netflix", "primevideo", "hotstar", "disneyplus", "hulu", "max.com", "appletv"])
-        is_youtube = ("youtube.com" in domain_str or "- youtube" in title_lower) and "music.youtube" not in domain_str
-
-        if chap_match and is_manhwa:
-            chap_num = chap_match.group(1)
-            parts = re.split(r'[-–|]', title_raw)
-            series_name = parts[0].strip()
-            if series_name:
-                cursor.execute("""
-                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
-                VALUES ('MANHWA', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(title) DO UPDATE SET
-                    media_type = 'MANHWA',
-                    current_unit = excluded.current_unit,
-                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
-                    last_updated = CURRENT_TIMESTAMP;
-                """, (series_name, f"Chapter {chap_num}", url_str))
-        elif (season_ep_match or ep_match) and is_anime:
-            unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}" if season_ep_match else f"Episode {ep_match.group(1)}"
-            t_clean = re.sub(r'^(?:watch\s+)', '', title_raw, flags=re.IGNORECASE)
-            t_clean = re.sub(r'(?:english\s+subbed|english\s+dubbed|on\s+hianime\.to|on\s+crunchyroll|\bon\s+[\w\.-]+)', '', t_clean, flags=re.IGNORECASE)
-            t_clean = re.sub(r'(?:s\d+\s*e\d+|season\s*\d+.*?episode\s*\d+|episode\s*\d+|ep\.?\s*\d+).*$', '', t_clean, flags=re.IGNORECASE)
-            parts = re.split(r'[-–|]', t_clean)
-            series_name = parts[0].strip()
-            if series_name:
-                cursor.execute("""
-                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
-                VALUES ('ANIME', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(title) DO UPDATE SET
-                    media_type = 'ANIME',
-                    current_unit = excluded.current_unit,
-                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
-                    last_updated = CURRENT_TIMESTAMP;
-                """, (series_name, unit_str, url_str))
-        elif (season_ep_match or ep_match) and is_show:
-            unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}" if season_ep_match else f"Episode {ep_match.group(1)}"
-            t_clean = re.sub(r'(?:-\s*netflix|-\s*prime\s*video|-\s*disney\+.*|-\s*hotstar).*$', '', title_raw, flags=re.IGNORECASE)
-            t_clean = re.sub(r'(?:s\d+\s*e\d+|season\s*\d+.*?episode\s*\d+|episode\s*\d+|ep\.?\s*\d+).*$', '', t_clean, flags=re.IGNORECASE)
-            parts = re.split(r'[-–|]', t_clean)
-            series_name = parts[0].strip()
-            if series_name:
-                cursor.execute("""
-                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
-                VALUES ('SHOW', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(title) DO UPDATE SET
-                    media_type = 'SHOW',
-                    current_unit = excluded.current_unit,
-                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
-                    last_updated = CURRENT_TIMESTAMP;
-                """, (series_name, unit_str, url_str))
-        elif is_youtube and len(title_raw) > 3:
-            cleaned_title = re.sub(r'\s*-\s*YouTube\s*$', '', title_raw, flags=re.IGNORECASE).strip()
-            unit_str = "Video"
-            if season_ep_match:
-                unit_str = f"S{season_ep_match.group(1) or season_ep_match.group(3)} E{season_ep_match.group(2) or season_ep_match.group(4)}"
-            elif ep_match:
-                unit_str = f"Episode {ep_match.group(1)}"
-            elif re.search(r'part\s*(\d+)', title_lower):
-                p_m = re.search(r'part\s*(\d+)', title_lower)
-                unit_str = f"Part {p_m.group(1)}"
-            if cleaned_title:
-                cursor.execute("""
-                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
-                VALUES ('SHOW', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(title) DO UPDATE SET
-                    media_type = 'SHOW',
-                    current_unit = excluded.current_unit,
-                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
-                    last_updated = CURRENT_TIMESTAMP;
-                """, (cleaned_title, unit_str, url_str))
-
-    # Ensure media_bookmarks never exceeds the top 50 items
-    cursor.execute("""
-    DELETE FROM media_bookmarks
-    WHERE id NOT IN (
-        SELECT id FROM media_bookmarks
-        ORDER BY last_updated DESC
-        LIMIT 50
-    );
-    """)
-
-    conn.commit()
-    conn.close()
+    # Parse and upsert media bookmark if detected
+    media_info = parse_media_info(
+        window_title=payload.window_title,
+        domain=payload.domain,
+        url=payload.url,
+        explicit_media_type=payload.media_type,
+        explicit_series_title=payload.series_title,
+        explicit_unit_label=payload.unit_label,
+        timestamp_offset=payload.timestamp_offset
+    )
+    if media_info:
+        upsert_bookmark(
+            media_type=media_info["media_type"],
+            title=media_info["title"],
+            current_unit=media_info["current_unit"],
+            resume_url=media_info["resume_url"],
+            timestamp_offset=media_info.get("timestamp_offset")
+        )
 
     if mode_changed:
         await broadcast_state("MODE_CHANGE", {

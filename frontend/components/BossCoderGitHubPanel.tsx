@@ -1,21 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { GraduationCap, GitPullRequest, ExternalLink, CheckCircle, AlertTriangle } from "lucide-react";
+import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 export default function BossCoderGitHubPanel() {
-  const [bosscoderAlerts, setBosscoderAlerts] = useState<any[]>([]);
-  const [githubPrs, setGithubPrs] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetch("http://127.0.0.1:4000/api/briefing/morning")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.bosscoder_alerts) setBosscoderAlerts(data.bosscoder_alerts);
-        if (data.github_notifications) setGithubPrs(data.github_notifications);
-      })
-      .catch(() => {});
-  }, []);
+  const { briefing } = useFlightDeckStore();
+  const bosscoderAlerts = briefing?.bosscoder_alerts || [];
+  const githubPrs = briefing?.github_notifications || [];
 
   return (
     <div className="etched-panel rounded-xl p-5 space-y-6">

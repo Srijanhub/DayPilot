@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, Square, Check, AudioWaveform, Clock, AlertCircle, ShieldAlert, Sparkles } from "lucide-react";
+import { daypilotApi } from "@/lib/api";
 
 interface VoiceMemo {
   id?: number;
@@ -34,12 +35,9 @@ export default function VoiceMemoPanel() {
   // Load saved voice memos from local SQLite backend
   const fetchMemos = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:4000/api/memos");
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setMemos(data);
-        }
+      const data = await daypilotApi.getMemos();
+      if (Array.isArray(data) && data.length > 0) {
+        setMemos(data);
       }
     } catch (e) {
       // Backend temporarily offline
@@ -119,19 +117,13 @@ export default function VoiceMemoPanel() {
         formData.append("transcript", latestTranscriptRef.current);
 
         try {
-          const res = await fetch("http://127.0.0.1:4000/api/memos/upload", {
-            method: "POST",
-            body: formData
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const newMemo: VoiceMemo = {
-              time: data.time || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-              text: data.transcription || latestTranscriptRef.current || "Audio note recorded.",
-              action: data.action_item || "Review audio memo"
-            };
-            setMemos((prev) => [newMemo, ...prev]);
-          }
+          const data = await daypilotApi.uploadMemo(formData);
+          const newMemo: VoiceMemo = {
+            time: data.time || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            text: data.transcription || latestTranscriptRef.current || "Audio note recorded.",
+            action: data.action_item || "Review audio memo"
+          };
+          setMemos((prev) => [newMemo, ...prev]);
         } catch (err) {
           // Offline fallback
           const fallbackText = latestTranscriptRef.current || "Voice brain dump recorded.";

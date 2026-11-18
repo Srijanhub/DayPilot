@@ -6,7 +6,8 @@ echo "[$(date)] DayPilot Nightly Retrospective initiated..."
 
 if ! curl -s http://127.0.0.1:4000/api/context > /dev/null; then
     echo "Backend offline. Starting temporarily..."
-    cd /Users/srijanhalder/Desktop/Experiments/daypilot/backend
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    cd "$SCRIPT_DIR/../backend"
     ./venv/bin/uvicorn app:app --host 127.0.0.1 --port 4000 &
     sleep 2
 fi

@@ -2,11 +2,12 @@
 # DayPilot launchd Installation Script
 # Registers 09:00 AM and 01:00 AM background timers on macOS.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
-MORNING_PLIST="/Users/srijanhalder/Desktop/Experiments/daypilot/macos/com.daypilot.morning.plist"
-NIGHTLY_PLIST="/Users/srijanhalder/Desktop/Experiments/daypilot/macos/com.daypilot.nightly.plist"
+MORNING_PLIST="$SCRIPT_DIR/com.daypilot.morning.plist"
+NIGHTLY_PLIST="$SCRIPT_DIR/com.daypilot.nightly.plist"
 
 cp "$MORNING_PLIST" "$LAUNCH_AGENTS_DIR/"
 cp "$NIGHTLY_PLIST" "$LAUNCH_AGENTS_DIR/"
