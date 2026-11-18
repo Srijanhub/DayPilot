@@ -16,7 +16,24 @@ import SpectrogramRibbon from "@/components/SpectrogramRibbon";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
 
 export default function FlightDeckPage() {
-  const { mode, audioEnergy, isPhaseShifting, timelineSegments, setMode } = useFlightDeckStore();
+  const { mode, audioEnergy, isPhaseShifting, timelineSegments, setMode, setTimelineSegments } = useFlightDeckStore();
+
+  // Load live timeline segments from SQLite backend
+  useEffect(() => {
+    const fetchTimeline = () => {
+      fetch("http://127.0.0.1:4000/api/timeline")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setTimelineSegments(data);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchTimeline();
+    const interval = setInterval(fetchTimeline, 10000);
+    return () => clearInterval(interval);
+  }, [setTimelineSegments]);
 
   // Connect to local backend WebSocket for real-time telemetry updates
   useEffect(() => {

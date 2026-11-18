@@ -1,19 +1,21 @@
 "use client";
 
-import React from "react";
-import { GraduationCap, GitPullRequest, GitMerge, AlertCircle, ExternalLink } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { GraduationCap, GitPullRequest, ExternalLink } from "lucide-react";
 
 export default function BossCoderGitHubPanel() {
-  const bosscoderAlerts = [
-    { title: "Dynamic Programming Lab 4", deadline: "Today, 4:00 PM", status: "PENDING SUBMISSION" },
-    { title: "Live Mentorship Session", deadline: "8:00 PM - 9:30 PM", status: "STARTS IN 9H" },
-    { title: "Weekly Contest #28", deadline: "Saturday, 7:00 PM", status: "UPCOMING" }
-  ];
+  const [bosscoderAlerts, setBosscoderAlerts] = useState<any[]>([]);
+  const [githubPrs, setGithubPrs] = useState<any[]>([]);
 
-  const githubPrs = [
-    { repo: "daypilot", pr: "#42", title: "feat: add simplex noise 3D orb", author: "srijanhalder", status: "REVIEW REQUESTED" },
-    { repo: "backend-engine", pr: "#18", title: "fix: 120s hysteresis debounce classifier", author: "teammate", status: "APPROVED" }
-  ];
+  useEffect(() => {
+    fetch("http://127.0.0.1:4000/api/briefing/morning")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.bosscoder_alerts) setBosscoderAlerts(data.bosscoder_alerts);
+        if (data.github_notifications) setGithubPrs(data.github_notifications);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="etched-panel rounded-xl p-5 space-y-4">
@@ -64,7 +66,9 @@ export default function BossCoderGitHubPanel() {
               GITHUB NOTIFICATIONS
             </span>
           </div>
-          <span className="text-[10px] font-mono text-[var(--text-muted)]">2 ACTIONABLE</span>
+          <span className="text-[10px] font-mono text-[var(--text-muted)]">
+            {githubPrs.length} ACTIONABLE
+          </span>
         </div>
 
         <div className="space-y-2">
@@ -75,7 +79,7 @@ export default function BossCoderGitHubPanel() {
             >
               <div className="truncate mr-2">
                 <div className="flex items-center space-x-1.5 font-medium text-white truncate">
-                  <span className="font-mono text-[#00f5ff]">{g.pr}</span>
+                  <span className="font-mono text-[#00f5ff]">{g.pr || "PR"}</span>
                   <span className="truncate">{g.title}</span>
                 </div>
                 <div className="text-[10px] font-mono text-slate-400">repo: {g.repo}</div>

@@ -1,41 +1,62 @@
 "use client";
 
-import React from "react";
-import { Activity, ShieldCheck, ArrowRight, CheckCircle2, Clock } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Activity, CheckCircle2, Clock } from "lucide-react";
 
 export default function SpectrogramRibbon() {
-  // 48 half-hour slots representing 24h spectrogram
-  const bars = Array.from({ length: 48 }).map((_, i) => {
-    const hour = i / 2;
-    let height = 20;
-    let color = "oklch(1 0 0 / 0.08)";
-    let label = `${Math.floor(hour)}:00`;
+  const [focusScore, setFocusScore] = useState<number>(88);
+  const [flightLog, setFlightLog] = useState<any[]>([]);
+  const [bars, setBars] = useState<any[]>([]);
 
-    if (hour >= 9 && hour < 11.5) {
-      height = 85;
-      color = "oklch(0.85 0.18 200)"; // Work (Cyan)
-    } else if (hour >= 11.5 && hour < 13) {
-      height = 70;
-      color = "oklch(0.74 0.18 155)"; // Study (Emerald)
-    } else if (hour >= 13 && hour < 13.75) {
-      height = 40;
-      color = "oklch(0.68 0.21 15)";  // Manhwa (Rose)
-    } else if (hour >= 14 && hour < 16.5) {
-      height = 90;
-      color = "oklch(0.85 0.18 200)"; // Work (Cyan)
-    } else if (hour >= 16.5 && hour < 17.5) {
-      height = 50;
-      color = "oklch(0.78 0.16 65)";  // Shows (Amber)
-    }
+  useEffect(() => {
+    // 1. Fetch nightly stats
+    fetch("http://127.0.0.1:4000/api/briefing/nightly")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.focus_score) setFocusScore(data.focus_score);
+        if (data.flight_log) setFlightLog(data.flight_log);
+      })
+      .catch(() => {});
 
-    return { hour, height, color, label };
-  });
+    // 2. Fetch live timeline for the 48 half-hour slots
+    fetch("http://127.0.0.1:4000/api/timeline")
+      .then((res) => res.json())
+      .then((segments: any[]) => {
+        const slotBars = Array.from({ length: 48 }).map((_, i) => {
+          const slotHour = i / 2;
+          let height = 15;
+          let color = "oklch(1 0 0 / 0.08)";
+          let category = "IDLE";
 
-  const flightLog = [
-    { title: "Dynamic Programming Lab 4 Submission", status: "COMPLETED", time: "11:20 AM" },
-    { title: "Review GitHub PR #42 & Architecture", status: "COMPLETED", time: "02:40 PM" },
-    { title: "YouTube DSA Playlist: Ep 16 Graph BFS", status: "CARRIED_OVER", time: "Tomorrow 09:00 AM" }
-  ];
+          for (const seg of segments) {
+            if (slotHour >= seg.startHour && slotHour <= seg.endHour) {
+              if (seg.category === "WORK") {
+                height = 85;
+                color = "oklch(0.85 0.18 200)";
+                category = "WORK";
+              } else if (seg.category === "STUDY") {
+                height = 75;
+                color = "oklch(0.74 0.18 155)";
+                category = "STUDY";
+              } else if (seg.category === "MANHWA") {
+                height = 50;
+                color = "oklch(0.68 0.21 15)";
+                category = "MANHWA";
+              } else if (seg.category === "SHOWS") {
+                height = 60;
+                color = "oklch(0.78 0.16 65)";
+                category = "SHOWS";
+              }
+              break;
+            }
+          }
+
+          return { slotHour, height, color, category };
+        });
+        setBars(slotBars);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="etched-panel rounded-xl p-5 space-y-5">
@@ -50,7 +71,7 @@ export default function SpectrogramRibbon() {
         <div className="flex items-center space-x-4 text-xs font-mono">
           <span className="text-[var(--text-muted)]">FOCUS SCORE:</span>
           <span className="text-sm font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-800/40">
-            88 / 100
+            {focusScore} / 100
           </span>
         </div>
       </div>
@@ -71,7 +92,7 @@ export default function SpectrogramRibbon() {
                 height: `${bar.height}%`,
                 backgroundColor: bar.color
               }}
-              title={`Hour ${bar.label}: ${bar.height}% focus intensity`}
+              title={`Slot ${bar.slotHour}:00 • ${bar.category} (${bar.height}% intensity)`}
             />
           ))}
         </div>
@@ -125,7 +146,7 @@ export default function SpectrogramRibbon() {
                       ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
                       : "bg-amber-950/60 text-amber-400 border border-amber-800/40"
                   }`}>
-                    {item.status === "COMPLETED" ? "RESOLVED" : "CARRIED OVER"}
+                    {isDone ? "RESOLVED" : "CARRIED OVER"}
                   </span>
                 </div>
               </div>

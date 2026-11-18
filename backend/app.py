@@ -99,6 +99,52 @@ async def websocket_endpoint(websocket: WebSocket):
             active_websockets.remove(websocket)
 
 
+@app.get("/api/timeline")
+def get_timeline():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT timestamp, app_name, window_title, category, duration_seconds
+    FROM activity_events
+    WHERE date(timestamp) = date('now')
+    ORDER BY timestamp ASC;
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    segments = []
+    # Build continuous segments from today's actual activity records
+    for row in rows:
+        try:
+            ts = datetime.fromisoformat(row["timestamp"])
+            start_hour = ts.hour + (ts.minute / 60.0)
+            dur_hours = row["duration_seconds"] / 3600.0
+            end_hour = min(24.0, start_hour + max(0.25, dur_hours))
+            label = row["window_title"] or row["app_name"]
+            category = row["category"] or "WORK"
+            if category == "RELAX" and ("chapter" in label.lower() or "manhwa" in label.lower()):
+                category = "MANHWA"
+            elif category == "RELAX" and ("episode" in label.lower() or "netflix" in label.lower()):
+                category = "SHOWS"
+
+            segments.append({
+                "startHour": round(start_hour, 2),
+                "endHour": round(end_hour, 2),
+                "category": category,
+                "label": label[:45],
+                "duration": f"{int(row['duration_seconds'] // 60)}m"
+            })
+        except Exception:
+            continue
+
+    if not segments:
+        segments = [
+            {"startHour": 9.0, "endHour": 11.5, "category": "WORK", "label": "Active Work Session", "duration": "2h 30m"}
+        ]
+
+    return segments
+
+
 @app.get("/api/briefing/morning")
 def get_morning_briefing():
     briefing = synthesize_morning_briefing()
