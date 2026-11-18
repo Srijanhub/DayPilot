@@ -38,6 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
         window.isMovableByWindowBackground = true
         window.minSize = NSSize(width: 960, height: 600)
+        window.collectionBehavior = [.fullScreenPrimary, .fullScreenAllowsTiling]
         window.delegate = self
 
         // WebKit Configuration

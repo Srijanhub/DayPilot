@@ -72,11 +72,11 @@ export default function FlightDeckPage() {
       {/* Top Cockpit Header & Mode Switcher */}
       <CockpitHeader />
 
-      {/* Cockpit HUD Workspace */}
-      <div className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+      {/* Cockpit HUD Workspace - Expands smoothly across fullscreen and ultrawide displays */}
+      <div className="flex-1 px-4 sm:px-6 lg:px-10 xl:px-12 py-6 w-full max-w-[2400px] mx-auto space-y-6">
         
         {/* Top Hero Section: The Central 3D Instrument */}
-        <div className="relative w-full h-[480px] rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden flex items-center justify-center">
+        <div className="relative w-full h-[480px] lg:h-[520px] xl:h-[560px] rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden flex items-center justify-center">
           {/* Subtle Radar Background Grid */}
           <div
             className="absolute inset-0 opacity-15 pointer-events-none"

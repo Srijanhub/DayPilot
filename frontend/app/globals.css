@@ -2,6 +2,9 @@
 
 @layer base {
   :root {
+    /* Base Font Sizing: Scaled up for superior legibility */
+    font-size: 17.5px;
+
     /* Flight Deck Theme Tokens in OKLCH */
     --bg-base: oklch(0.12 0.015 250);
     --bg-surface: oklch(0.15 0.018 250 / 0.55);
@@ -125,13 +128,38 @@ body {
   opacity: 1;
 }
 
+@media (min-width: 1440px) {
+  :root {
+    font-size: 18.5px;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    font-size: 19.5px;
+  }
+}
+
 /* Micro Instrument Labels */
 .instrument-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-muted);
+}
+
+/* Scaled micro-typography for readability */
+.text-\[9px\] {
+  font-size: 0.72rem !important;
+}
+
+.text-\[10px\] {
+  font-size: 0.78rem !important;
+}
+
+.text-\[11px\] {
+  font-size: 0.84rem !important;
 }
 
 /* Editorial Serif for Quotes */
