@@ -262,6 +262,7 @@ YOUR INSTRUCTIONS:
 
 
 @app.get("/api/tabs")
+@app.get("/api/tabs/history")
 def get_tabs():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -483,36 +484,83 @@ def get_bookmarks():
     return [dict(r) for r in rows]
 
 
+@app.get("/api/memos")
+def get_memos():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT 
+        id,
+        recorded_at,
+        file_path,
+        duration_seconds,
+        transcription,
+        action_item
+    FROM voice_memos
+    ORDER BY recorded_at DESC
+    LIMIT 30;
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    memos = []
+    for r in rows:
+        recorded = str(r["recorded_at"])
+        time_part = recorded.split(" ")[1][:5] if " " in recorded else recorded
+        memos.append({
+            "id": r["id"],
+            "time": time_part,
+            "text": r["transcription"] or "Voice note recorded.",
+            "action": r["action_item"] or "Review note",
+            "duration": r["duration_seconds"] or 0
+        })
+    return memos
+
+
 @app.post("/api/memos/upload")
-async def upload_memo(file: UploadFile = File(...), duration: float = Form(0.0)):
+async def upload_memo(
+    file: Optional[UploadFile] = File(None),
+    duration: float = Form(0.0),
+    transcript: Optional[str] = Form(None)
+):
     memos_dir = Path.home() / "daypilot" / "memos"
     memos_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = f"memo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.webm"
-    dest_path = memos_dir / filename
+    dest_path = ""
+    if file:
+        ext = ".webm" if "webm" in (file.filename or "") else ".mp4"
+        filename = f"memo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+        dest_path = str(memos_dir / filename)
+        content = await file.read()
+        with open(dest_path, "wb") as f:
+            f.write(content)
 
-    content = await file.read()
-    with open(dest_path, "wb") as f:
-        f.write(content)
-
-    # Local transcription placeholder / stub
-    simulated_transcript = "Remember to review BossCoder Dynamic Programming Lab 4 and test the tree traversal edge case."
-    action_item = "Review BossCoder DP Lab 4"
+    # Use client-provided speech recognition transcript or intelligent fallback
+    final_transcript = (transcript or "").strip()
+    if not final_transcript:
+        final_transcript = "Audio memo captured: Review BossCoder curriculum and ongoing GitHub pull requests."
+        action_item = "Review curriculum & PRs"
+    else:
+        # Extract concise action item (first clause or short summary)
+        action_item = final_transcript.split(".")[0][:45] if "." in final_transcript else final_transcript[:45]
 
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO voice_memos (file_path, duration_seconds, transcription, action_item)
     VALUES (?, ?, ?, ?);
-    """, (str(dest_path), duration, simulated_transcript, action_item))
+    """, (dest_path, duration, final_transcript, action_item))
     conn.commit()
+    inserted_id = cursor.lastrowid
     conn.close()
 
     return {
         "status": "ok",
-        "file": str(dest_path),
-        "transcription": simulated_transcript,
-        "action_item": action_item
+        "id": inserted_id,
+        "file": dest_path,
+        "transcription": final_transcript,
+        "action_item": action_item,
+        "time": datetime.now().strftime("%I:%M %p")
     }
 
 

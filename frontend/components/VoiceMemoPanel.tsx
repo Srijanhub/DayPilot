@@ -1,15 +1,25 @@
 "use client";
 
-import React, { useState, useRef } from "react";
-import { Mic, Square, Check, AudioWaveform, Clock } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Mic, Square, Check, AudioWaveform, Clock, AlertCircle } from "lucide-react";
+
+interface VoiceMemo {
+  id?: number;
+  time: string;
+  text: string;
+  action: string;
+  duration?: number;
+}
 
 export default function VoiceMemoPanel() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [memos, setMemos] = useState([
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [memos, setMemos] = useState<VoiceMemo[]>([
     {
       time: "08:45 AM",
-      text: "Remember to test the null-safe regex on Flame Comics and review BossCoder DP Lab 4 edge cases.",
+      text: "Review BossCoder Dynamic Programming Lab 4 edge cases and check active GitHub PR comments.",
       action: "Review DP Lab 4 edge cases"
     }
   ]);
@@ -17,11 +27,55 @@ export default function VoiceMemoPanel() {
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const speechRecognitionRef = useRef<any>(null);
+  const latestTranscriptRef = useRef<string>("");
+
+  // Load saved voice memos from local SQLite backend
+  const fetchMemos = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:4000/api/memos");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setMemos(data);
+        }
+      }
+    } catch (e) {
+      // Backend temporarily offline
+    }
+  };
+
+  useEffect(() => {
+    fetchMemos();
+  }, []);
+
+  const getBestMimeType = (): string => {
+    if (typeof MediaRecorder === "undefined") return "";
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/aac",
+      "audio/ogg"
+    ];
+    for (const type of candidates) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return "";
+  };
 
   const startRecording = async () => {
+    setErrorMessage(null);
+    setLiveTranscript("");
+    latestTranscriptRef.current = "";
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = getBestMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -30,49 +84,79 @@ export default function VoiceMemoPanel() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const recordedType = mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
         const formData = new FormData();
-        formData.append("file", audioBlob, "memo.webm");
+        const ext = recordedType.includes("mp4") ? "m4a" : "webm";
+        formData.append("file", audioBlob, `memo.${ext}`);
         formData.append("duration", recordingDuration.toString());
+        formData.append("transcript", latestTranscriptRef.current);
 
         try {
           const res = await fetch("http://127.0.0.1:4000/api/memos/upload", {
             method: "POST",
             body: formData
           });
-          const data = await res.json();
-          if (data.transcription) {
-            setMemos((prev) => [
-              {
-                time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-                text: data.transcription,
-                action: data.action_item || "Review notes"
-              },
-              ...prev
-            ]);
+          if (res.ok) {
+            const data = await res.json();
+            const newMemo: VoiceMemo = {
+              time: data.time || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+              text: data.transcription || latestTranscriptRef.current || "Audio note recorded.",
+              action: data.action_item || "Review audio memo"
+            };
+            setMemos((prev) => [newMemo, ...prev]);
           }
         } catch (err) {
-          // If backend offline, add to local mock memo list
+          // Offline fallback
+          const fallbackText = latestTranscriptRef.current || "Voice brain dump recorded.";
           setMemos((prev) => [
             {
               time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-              text: "Quick brain dump: check LeetCode contest schedule and finish DayPilot Phase 1 Gate.",
-              action: "Finish Phase 1 Gate"
+              text: fallbackText,
+              action: fallbackText.slice(0, 35)
             },
             ...prev
           ]);
         }
+        setLiveTranscript("");
       };
 
-      mediaRecorder.start();
+      // Initialize browser SpeechRecognition if available
+      const SpeechClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechClass) {
+        try {
+          const recognizer = new SpeechClass();
+          recognizer.continuous = true;
+          recognizer.interimResults = true;
+          recognizer.lang = "en-US";
+
+          recognizer.onresult = (event: any) => {
+            let fullText = "";
+            for (let i = 0; i < event.results.length; i++) {
+              fullText += event.results[i][0].transcript + " ";
+            }
+            const clean = fullText.trim();
+            setLiveTranscript(clean);
+            latestTranscriptRef.current = clean;
+          };
+
+          recognizer.onerror = () => {};
+          recognizer.start();
+          speechRecognitionRef.current = recognizer;
+        } catch (e) {
+          // Speech recognition optional
+        }
+      }
+
+      mediaRecorder.start(250);
       setIsRecording(true);
       setRecordingDuration(0);
 
       timerRef.current = setInterval(() => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
-    } catch (err) {
-      alert("Microphone access is required to record voice memos.");
+    } catch (err: any) {
+      setErrorMessage("Microphone access is disabled. Please allow microphone permission in macOS System Settings > Privacy & Security > Microphone.");
     }
   };
 
@@ -82,6 +166,11 @@ export default function VoiceMemoPanel() {
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
       setIsRecording(false);
       clearInterval(timerRef.current);
+    }
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch (e) {}
     }
   };
 
@@ -94,53 +183,76 @@ export default function VoiceMemoPanel() {
             VOICE MEMOS // BRAIN DUMP
           </span>
         </div>
-        <span className="text-[10px] font-mono text-[var(--text-muted)]">LOCAL STORAGE</span>
+        <span className="text-xs font-mono text-[var(--text-muted)]">LOCAL STORAGE</span>
       </div>
 
       {/* Record Controller */}
-      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-              isRecording
-                ? "bg-rose-600 text-white animate-pulse"
-                : "bg-[var(--accent-primary)] text-black hover:scale-105"
-            }`}
-          >
-            {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
-          </button>
-          <div>
-            <div className="text-xs font-semibold text-white">
-              {isRecording ? "Recording in progress..." : "Quick Audio Thought"}
-            </div>
-            <div className="text-[10px] font-mono text-[var(--text-muted)]">
-              {isRecording ? `${recordingDuration}s elapsed` : "Saves to ~/daypilot/memos"}
+      <div className="p-3.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                isRecording
+                  ? "bg-rose-600 text-white animate-pulse"
+                  : "bg-[var(--accent-primary)] text-black hover:scale-105"
+              }`}
+              title={isRecording ? "Stop Recording" : "Start Recording"}
+            >
+              {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-5 h-5" />}
+            </button>
+            <div>
+              <div className="text-sm font-semibold text-white">
+                {isRecording ? "Recording in progress..." : "Quick Audio Thought"}
+              </div>
+              <div className="text-xs font-mono text-[var(--text-muted)]">
+                {isRecording ? `${recordingDuration}s elapsed` : "Saves to ~/daypilot/memos"}
+              </div>
             </div>
           </div>
+
+          {isRecording && (
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-mono text-rose-400 font-bold animate-pulse">REC</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            </div>
+          )}
         </div>
 
-        {isRecording && (
-          <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+        {/* Live spoken preview */}
+        {isRecording && liveTranscript && (
+          <div className="p-2 rounded bg-black/40 border border-[var(--accent-ring)] text-xs text-[var(--accent-primary)] font-mono animate-fadeIn">
+            <span className="text-[var(--text-muted)] mr-1.5">[LIVE SPEECH]:</span>
+            "{liveTranscript}"
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="p-2.5 rounded bg-rose-950/60 border border-rose-800/40 text-xs text-rose-300 flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
         )}
       </div>
 
       {/* Recent Memos */}
       <div className="space-y-2">
-        <div className="instrument-label text-[9px] text-[var(--text-muted)]">
-          RECENT AUDIO THOUGHTS & EXTRACTED ACTIONS
+        <div className="instrument-label text-xs text-[var(--text-muted)]">
+          RECENT AUDIO THOUGHTS & EXTRACTED ACTIONS ({memos.length})
         </div>
-        {memos.map((m, idx) => (
-          <div key={idx} className="p-2.5 rounded bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-xs space-y-1">
-            <div className="flex items-center justify-between text-[10px] font-mono text-[var(--accent-primary)]">
-              <span>ACTION: {m.action}</span>
-              <span className="text-[var(--text-muted)]">{m.time}</span>
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+          {memos.map((m, idx) => (
+            <div key={idx} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-xs space-y-1 hover:border-[var(--border-active)] transition">
+              <div className="flex items-center justify-between text-xs font-mono text-[var(--accent-primary)] font-semibold">
+                <span>ACTION: {m.action}</span>
+                <span className="text-[var(--text-muted)] font-normal">{m.time}</span>
+              </div>
+              <p className="text-slate-300 text-xs leading-relaxed">
+                "{m.text}"
+              </p>
             </div>
-            <p className="text-slate-300 text-[11px] leading-relaxed">
-              "{m.text}"
-            </p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
