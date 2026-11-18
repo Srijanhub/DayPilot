@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "DayPilot Companion",
+  "version": "1.0.0",
+  "description": "Continuous focused tab tracker, manhwa/shows progress scraper, and YouTube Music relay for DayPilot.",
+  "permissions": [
+    "tabs",
+    "idle",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:4000/*",
+    "http://localhost:4000/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.asurascans.com/*",
+        "*://*.asuracomic.net/*",
+        "*://*.flamecomics.xyz/*",
+        "*://*.flamecomics.me/*",
+        "*://*.mangadex.org/*",
+        "*://*.webtoons.com/*",
+        "*://*.reaperscans.com/*",
+        "*://*.netflix.com/*",
+        "*://*.crunchyroll.com/*",
+        "*://*.aniwatch.to/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content-scripts/media-tracker.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://music.youtube.com/*"],
+      "js": ["content-scripts/ytmusic.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "DayPilot Status"
+  }
+}
