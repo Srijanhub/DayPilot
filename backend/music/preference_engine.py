@@ -53,25 +53,28 @@ def get_preferred_cluster_for_activity(activity: str) -> Dict[str, Any]:
             "reason": f"Queued {row['genre']}: {pct}% of your {activity.lower()} listens"
         }
 
-    # Default statistical heuristics
+    # Curated acoustic baseline presets (when empirical logs are gathering)
     defaults = {
         "WORK": {
             "cluster": "Deep Focus Flow",
-            "genre": "Synthwave",
-            "confidence_pct": 84,
-            "reason": "Queued Deep Focus: 84% of your coding focus listens"
+            "genre": "Synthwave / Dark Techno",
+            "confidence_pct": None,
+            "track": "Resonance — HOME",
+            "reason": "Curated acoustic preset optimized for coding flow & syntax focus"
         },
         "STUDY": {
             "cluster": "Study & Problem Solving",
-            "genre": "Lo-Fi Beats",
-            "confidence_pct": 78,
-            "reason": "Queued Study Flow: 78% of your BossCoder study sessions"
+            "genre": "Lo-Fi Beats / Piano",
+            "confidence_pct": None,
+            "track": "Lofi Rain Session — ChilledCow",
+            "reason": "Curated acoustic preset optimized for algorithmic study & reading"
         },
         "RELAX": {
             "cluster": "Late Night Chill",
             "genre": "Ambient Soundscapes",
-            "confidence_pct": 91,
-            "reason": "Queued Chill: 91% of your manhwa & leisure reading"
+            "confidence_pct": None,
+            "track": "Weightless — Marconi Union",
+            "reason": "Curated acoustic preset for wind-down & leisure reading"
         }
     }
     return defaults.get(activity, defaults["WORK"])

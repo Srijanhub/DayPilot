@@ -20,12 +20,19 @@ server = MCPServer(
 )
 
 DAYPILOT_BACKEND_URL = os.environ.get("DAYPILOT_BACKEND_URL", "http://127.0.0.1:4000")
+DAYPILOT_API_TOKEN = os.environ.get("DAYPILOT_API_TOKEN", "daypilot_local_sec_994b7a2d")
 
 
 def _get_api(path: str) -> Dict[str, Any]:
     url = f"{DAYPILOT_BACKEND_URL}{path}"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "DayPilot-MCP/1.0"})
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "DayPilot-MCP/1.0",
+                "X-DayPilot-Token": DAYPILOT_API_TOKEN
+            }
+        )
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception as e:
@@ -39,7 +46,11 @@ def _post_api(path: str, data: Dict[str, Any]) -> Dict[str, Any]:
         req = urllib.request.Request(
             url,
             data=body,
-            headers={"Content-Type": "application/json", "User-Agent": "DayPilot-MCP/1.0"}
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "DayPilot-MCP/1.0",
+                "X-DayPilot-Token": DAYPILOT_API_TOKEN
+            }
         )
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             return json.loads(resp.read().decode("utf-8"))

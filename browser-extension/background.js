@@ -5,6 +5,7 @@
  */
 
 const API_ENDPOINT = "http://127.0.0.1:4000/api/heartbeat";
+const DAYPILOT_API_TOKEN = "daypilot_local_sec_994b7a2d";
 const ALARM_NAME = "daypilot_flush_alarm";
 const FLUSH_INTERVAL_MINUTES = 0.1; // ~6 seconds
 
@@ -98,7 +99,10 @@ async function collectAndFlush() {
 function sendToBackend(payload) {
   fetch(API_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-DayPilot-Token": DAYPILOT_API_TOKEN
+    },
     body: JSON.stringify(payload)
   }).catch(() => {
     // Backend offline, fail silently

@@ -200,7 +200,10 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
     } catch (e) {}
     fetch("http://127.0.0.1:4000/api/open-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-DayPilot-Token": process.env.NEXT_PUBLIC_DAYPILOT_API_TOKEN || "daypilot_local_sec_994b7a2d"
+      },
       body: JSON.stringify({ url })
     }).catch(() => {});
   };

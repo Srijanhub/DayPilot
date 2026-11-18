@@ -20,6 +20,7 @@ class ContextClassifier:
         # Debounce tracking
         self.pending_mode: Optional[str] = None
         self.pending_start_time: Optional[float] = None
+        self.pending_active_seconds: int = 0
         self.last_heartbeat_time: float = time.time()
 
         # Classification rule tables (can be loaded or configured)
@@ -78,10 +79,11 @@ class ContextClassifier:
                           title: Optional[str] = None, duration_seconds: int = 5,
                           idle_seconds: int = 0) -> Tuple[str, bool]:
         """
-        Process incoming heartbeat.
-        Returns: (effective_mode, did_mode_change)
+        Process incoming heartbeat with hysteresis debounce.
+        Requires continuous non-idle active dwell before transitioning modes.
         """
         now = time.time()
+        heartbeat_gap = now - self.last_heartbeat_time
         self.last_heartbeat_time = now
 
         # If manual override is engaged, it always takes precedence
@@ -89,35 +91,55 @@ class ContextClassifier:
             target_forced = self.manual_override.replace("FORCE_", "")
             did_change = (self.committed_mode != target_forced)
             self.committed_mode = target_forced
+            self.pending_mode = None
+            self.pending_start_time = None
+            self.pending_active_seconds = 0
             return self.committed_mode, did_change
 
-        # Check idle timeout
+        # 1. Check idle timeout:
+        # If user is idle, reset pending mode so stale candidate does NOT survive breaks
         if idle_seconds > self.idle_timeout:
+            self.pending_mode = None
+            self.pending_start_time = None
+            self.pending_active_seconds = 0
             return self.committed_mode, False
+
+        # 2. Check heartbeat gap:
+        # If heartbeats stopped for > 30s (system sleep, lid closed, browser quit), clear pending
+        if heartbeat_gap > 30:
+            self.pending_mode = None
+            self.pending_start_time = None
+            self.pending_active_seconds = 0
 
         # Classify instantaneous target
         target = self.classify_target(app_name, domain, title)
 
         if target == self.committed_mode:
-            # Reset pending since we are in the committed mode
+            # We are in current committed mode, reset any pending transition
             self.pending_mode = None
             self.pending_start_time = None
+            self.pending_active_seconds = 0
             return self.committed_mode, False
 
         # Target is different from committed mode
         if self.pending_mode != target:
-            # New candidate mode started
+            # New candidate mode initiated
             self.pending_mode = target
             self.pending_start_time = now
+            self.pending_active_seconds = max(1, duration_seconds)
             return self.committed_mode, False
 
-        # Candidate is sustaining
-        if self.pending_start_time and (now - self.pending_start_time >= self.hysteresis_threshold):
-            # Hysteresis threshold reached! Commit new mode
+        # Candidate is sustaining: accumulate verified active seconds
+        self.pending_active_seconds += duration_seconds
+
+        # Transition only when both active accumulated seconds AND continuous wall-clock time meet threshold
+        if (self.pending_active_seconds >= self.hysteresis_threshold and 
+            self.pending_start_time and (now - self.pending_start_time >= self.hysteresis_threshold)):
             old_mode = self.committed_mode
             self.committed_mode = target
             self.pending_mode = None
             self.pending_start_time = None
+            self.pending_active_seconds = 0
             return self.committed_mode, True
 
         return self.committed_mode, False

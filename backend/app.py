@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -33,13 +33,19 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "chrome-extension://*",
     ],
-    allow_origin_regex=r"chrome-extension://.*",
+    allow_origin_regex=r"^chrome-extension://[a-zA-Z0-9]+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+DAYPILOT_API_TOKEN = os.environ.get("DAYPILOT_API_TOKEN", "daypilot_local_sec_994b7a2d")
+
+
+def verify_daypilot_token(x_daypilot_token: Optional[str] = Header(None, alias="X-DayPilot-Token")):
+    if not x_daypilot_token or x_daypilot_token != DAYPILOT_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing X-DayPilot-Token")
 
 # Active Context Classifier instance
 classifier = ContextClassifier()
@@ -170,6 +176,10 @@ def handle_copilot_chat(req: ChatRequest):
     if not user_msg:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    lower = user_msg.lower()
+    user_name = os.environ.get("USER_NAME", "Developer")
+    gh_user = os.environ.get("GITHUB_USERNAME", "Developer")
+
     # 1. Gather live DayPilot contexts
     current_mode = classifier.committed_mode
     active_tab = get_live_tab()
@@ -184,11 +194,11 @@ def handle_copilot_chat(req: ChatRequest):
     gh_str = "\n".join([f"- {g.get('repo')} {g.get('pr')}: {g.get('title')} ({g.get('status')})" for g in github_data[:4]]) or "None pending."
     em_str = "\n".join([f"- {e.get('from')}: {e.get('subject')} -> {e.get('summary', e.get('concern', ''))}" for e in emails_data[:3]]) or "Inbox zero."
 
-    system_prompt = f"""You are DayPilot Copilot, an AI assistant directly integrated into Srijan Halder's DayPilot Flight Deck workstation on macOS.
+    system_prompt = f"""You are DayPilot Copilot, an AI assistant directly integrated into {user_name}'s DayPilot Flight Deck workstation on macOS.
 You have real-time live access to the user's workspace telemetry, accounts, and tasks.
 
 CURRENT USER TELEMETRY & CONTEXT:
-- Developer: Srijan Halder (@Srijanhub)
+- Developer: {user_name} (@{gh_user})
 - Current Mental State Mode: [{current_mode}] (WORK / STUDY / RELAX)
 - Active Opera GX Tab: {active_tab_str}
 - BossCoder Academy Progress:
@@ -200,8 +210,8 @@ CURRENT USER TELEMETRY & CONTEXT:
 
 YOUR INSTRUCTIONS:
 - You are concise, sharp, technically precise, and flight-deck styled.
-- You can help Srijan write and review code, solve BossCoder DSA/Java/Web Dev problems, draft PR reviews or comments, organize his mission plan, explain errors, or transition tasks.
-- If asked about his current tasks, tabs, PRs, or BossCoder progress, use the live telemetry above.
+- You can help {user_name} write and review code, solve BossCoder DSA/Java/Web Dev problems, draft PR reviews or comments, organize the mission plan, explain errors, or transition tasks.
+- If asked about current tasks, tabs, PRs, or BossCoder progress, use the live telemetry above.
 - Always be helpful, actionable, and straight to the point.
 """
 
@@ -245,15 +255,25 @@ YOUR INSTRUCTIONS:
     words = set(re.findall(r'\b\w+\b', lower))
     
     if words.intersection({"pr", "prs", "github", "pull", "pulls", "pullrequest"}):
-        reply = f"You currently have {len(github_data)} active open pull requests on GitHub:\n" + "\n".join([f"• **{g.get('repo')} {g.get('pr')}**: {g.get('title')} ({g.get('status')})" for g in github_data]) + "\n\nWould you like me to draft a response, review code changes, or test edge cases for any of these?"
+        if github_data:
+            pr_lines = [f"• **{g.get('repo')} {g.get('pr')}**: {g.get('title')} ({g.get('status')})" for g in github_data]
+            reply = f"You currently have {len(github_data)} active open pull requests on GitHub:\n" + "\n".join(pr_lines) + "\n\nWould you like me to draft a response, review code changes, or test edge cases for any of these?"
+        else:
+            reply = "No open GitHub pull requests found in your synced repositories."
     elif words.intersection({"bosscoder", "dsa", "class", "classes", "lecture", "lectures", "curriculum", "progress", "java"}):
-        reply = f"Here is your live BossCoder status:\n• **DSA (Java with Ankur Raj)**: 92% complete (22/24 topics). Next up is **DSA Tutorial 11** / Quick Sort.\n• **Attendance**: 61% attended (22/36 classes).\n• **Web Development (with Pavitra Lalwani)**: 100% completed.\n• **Contests**: Recent Web Dev & DSA contests completed.\n\nWant to walk through Quick Sort partitioning, review homework, or discuss recursion edge cases?"
+        if bosscoder_data:
+            bc_lines = [f"• **{b.get('title')}**: {b.get('status')} ({b.get('deadline')})\n  _{b.get('concern', '')}_" for b in bosscoder_data]
+            reply = "Here is your live BossCoder status:\n" + "\n".join(bc_lines) + "\n\nWould you like to review homework, walk through edge cases, or discuss the next topic?"
+        else:
+            reply = "Your BossCoder curriculum is currently up to date with no pending lecture alerts."
     elif "mail" in lower or "gmail" in lower or "email" in lower:
         reply = f"Here are your latest executive email summaries:\n" + "\n".join([f"• **{e.get('from')}**: {e.get('summary', e.get('subject'))}" for e in emails_data[:3]])
     elif "tab" in lower or "focus" in lower or "doing" in lower:
         reply = f"You are currently focused on **{active_tab.get('window_title')}** ({active_tab.get('domain')}) in mode **[{current_mode}]**. You've been on this tab for {active_tab.get('dwell_seconds')} seconds."
     elif "help" in lower or "hi" in lower or "hello" in lower:
-        reply = f"Greetings Srijan. DayPilot Copilot is online and connected to your cockpit. Mode: **[{current_mode}]**.\n\nI have full live context of:\n1. Your 4 active GitHub PRs (Jenkins, Apache ShardingSphere, Django, Netflix)\n2. Your BossCoder DSA progress with Ankur Raj (92% done)\n3. Your active Opera GX tabs & executive email digests\n\nWhat would you like to tackle right now?"
+        pr_count = len(github_data)
+        bc_count = len(bosscoder_data)
+        reply = f"Greetings {user_name}. DayPilot Copilot is online and connected to your cockpit. Mode: **[{current_mode}]**.\n\nI have full live context of:\n1. Your {pr_count} active GitHub PR(s)\n2. Your BossCoder curriculum progress ({bc_count} active module(s))\n3. Your active browser tabs & executive email digests\n\nWhat would you like to tackle right now?"
     else:
         reply = f"Received: \"{user_msg}\"\n\nI'm active in your cockpit under **[{current_mode}]** mode with your live tab ({active_tab.get('domain')}), BossCoder classes, and GitHub PRs mapped.\n\n*(Tip: Add `GEMINI_API_KEY=...` to `backend/.env` for unlimited deep coding and reasoning capabilities!)*"
 
@@ -380,27 +400,65 @@ def get_nightly_briefing():
     totals = {row["category"]: row["total_seconds"] for row in cursor.fetchall()}
 
     # Query bookmarks
-    cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC;")
+    cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC LIMIT 50;")
     bookmarks = [dict(r) for r in cursor.fetchall()]
 
+    # Query today's top activities for dynamic flight log
+    cursor.execute("""
+    SELECT 
+        COALESCE(window_title, app_name) as title,
+        category,
+        SUM(duration_seconds) as total_seconds,
+        MAX(timestamp) as last_seen
+    FROM activity_events
+    WHERE date(timestamp) = date('now')
+    GROUP BY COALESCE(window_title, app_name), category
+    ORDER BY total_seconds DESC
+    LIMIT 5;
+    """)
+    activity_rows = cursor.fetchall()
     conn.close()
 
     total_work = totals.get("WORK", 0) + totals.get("STUDY", 0)
     total_relax = totals.get("RELAX", 0) + totals.get("LEISURE", 0)
+    total_active = total_work + total_relax
+
+    # Calculate dynamic focus score from empirical activity events
+    focus_score = min(100, max(0, round((total_work / total_active) * 100))) if total_active > 0 else 0
+
+    flight_log = []
+    for act in activity_rows:
+        secs = act["total_seconds"] or 0
+        mins = secs // 60
+        cat = act["category"] or "WORK"
+        status = "COMPLETED" if cat in ("WORK", "STUDY") else "LEISURE"
+        last_seen_str = str(act["last_seen"])
+        time_part = last_seen_str.split(" ")[1][:5] if " " in last_seen_str else last_seen_str
+        flight_log.append({
+            "title": f"{act['title']} ({mins}m)",
+            "status": status,
+            "time": time_part
+        })
+
+    if not flight_log:
+        flight_log = [
+            {"title": "DayPilot Workstation Calibration", "status": "COMPLETED", "time": datetime.now().strftime("%I:%M %p")}
+        ]
+
+    work_hrs = round(total_work / 3600, 1)
+    relax_hrs = round(total_relax / 3600, 1)
+    ai_summary = f"Daily Flight Debrief: Logged {work_hrs}h productive flow (WORK/STUDY) and {relax_hrs}h rest/leisure with an overall focus score of {focus_score}%."
 
     return {
         "date": datetime.now().strftime("%Y-%m-%d"),
-        "focus_score": 88,
+        "focus_score": focus_score,
+        "is_demo_data": False,
         "total_work_seconds": total_work,
         "total_relax_seconds": total_relax,
         "category_totals": totals,
         "bookmarks": bookmarks,
-        "flight_log": [
-            {"title": "Dynamic Programming Lab 4 Submission", "status": "COMPLETED", "time": "11:20 AM"},
-            {"title": "Review GitHub PR #42 & Architecture", "status": "COMPLETED", "time": "02:40 PM"},
-            {"title": "YouTube DSA Playlist: Ep 16 Graph BFS", "status": "CARRIED_OVER", "time": "Tomorrow 09:00 AM"}
-        ],
-        "ai_summary": "High-velocity day. BossCoder dynamic programming goals completed with zero context regressions. 1 carried-over item re-queued for tomorrow 09:00 AM."
+        "flight_log": flight_log,
+        "ai_summary": ai_summary
     }
 
 
@@ -674,28 +732,9 @@ async def upload_memo(
 
 @app.get("/api/music/suggest")
 def get_music_suggestion():
+    from music.preference_engine import get_preferred_cluster_for_activity
     mode = classifier.committed_mode
-    suggestions = {
-        "WORK": {
-            "cluster": "Deep Focus Flow",
-            "genre": "Synthwave / Dark Techno",
-            "track": "Resonance — HOME",
-            "reason": "84% correlation with your coding focus sessions"
-        },
-        "STUDY": {
-            "cluster": "Study & Problem Solving",
-            "genre": "Lo-Fi Beats / Piano",
-            "track": "Lofi Rain Session — ChilledCow",
-            "reason": "Best memory retention during algorithmic study"
-        },
-        "RELAX": {
-            "cluster": "Late Night Chill",
-            "genre": "Ambient Soundscapes",
-            "track": "Weightless — Marconi Union",
-            "reason": "Optimal wind-down during manhwa reading"
-        }
-    }
-    return suggestions.get(mode, suggestions["WORK"])
+    return get_preferred_cluster_for_activity(mode)
 
 
 @app.post("/api/bookmarks/sync-history")
@@ -706,7 +745,7 @@ async def trigger_history_sync():
     return {"status": "ok", "synced_count": count}
 
 
-@app.post("/api/open-url")
+@app.post("/api/open-url", dependencies=[Depends(verify_daypilot_token)])
 def open_system_url(payload: Dict[str, Any]):
     url = payload.get("url", "")
     if url and (url.startswith("http://") or url.startswith("https://")):
