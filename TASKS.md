@@ -1,5 +1,5 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P5-T01 | Last updated: 2026-11-18 10:40
+Status: IN PROGRESS | Current: P6-T01 | Last updated: 2026-11-18 10:41
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
@@ -67,17 +67,17 @@ Status: IN PROGRESS | Current: P5-T01 | Last updated: 2026-11-18 10:40
 - [x] Committed: `phase-4: morning briefing pipeline, integrations, and voice memos`
 
 ## Phase 5: Ad-Free YouTube Music Engine & Preference Learning
-- [ ] P5-T01 Implement MusicSource abstraction with HTML5 Audio and local/Piped/YT adapters
+- [x] P5-T01 Implement MusicSource abstraction with HTML5 Audio and local/Piped/YT adapters
       Done when: Audio player plays tracks with play, pause, seek, and volume controls.
-- [ ] P5-T02 Implement Mode-Aware Auto-Queueing across the 4 clusters (Deep Focus, Study, Chill, Leisure)
+- [x] P5-T02 Implement Mode-Aware Auto-Queueing across the 4 clusters (Deep Focus, Study, Chill, Leisure)
       Done when: Mode change auto-queues appropriate playlist tracks.
-- [ ] P5-T03 Implement Preference Learning engine ($P(\text{genre} \mid \text{activity})$)
+- [x] P5-T03 Implement Preference Learning engine ($P(\text{genre} \mid \text{activity})$)
       Done when: Play events update SQLite and suggest tracks with explanation text.
-- [ ] P5-T04 Connect Audio Visualizer / BPM pulse to 3D Orb shader displacement
+- [x] P5-T04 Connect Audio Visualizer / BPM pulse to 3D Orb shader displacement
       Done when: Playing audio visibly modulates the orb's amplitude and rim intensity.
 ### Phase 5 Gate
-- [ ] Music playback and visualizer verified
-- [ ] Committed: `phase-5: ad-free music engine and preference learning`
+- [x] Music playback and visualizer verified
+- [x] Committed: `phase-5: ad-free music engine and preference learning`
 
 ## Phase 6: Nightly Retrospective, macOS Daemons & Demo Seed
 - [ ] P6-T01 Implement 01:00 AM Nightly Retrospective generator with Spectrogram Ribbon and Focus Score
