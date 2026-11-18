@@ -7,6 +7,7 @@ interface FlightDeckOrbProps {
   mode?: "WORK" | "STUDY" | "RELAX";
   audioEnergy?: number; // 0.0 to 1.0 from visualizer
   isPhaseShifting?: boolean;
+  isBreathing?: boolean;
 }
 
 // Color palettes per mode (Core and Rim in RGB)
@@ -157,10 +158,16 @@ void main() {
 export default function FlightDeckOrb({
   mode = "WORK",
   audioEnergy = 0.0,
-  isPhaseShifting = false
+  isPhaseShifting = false,
+  isBreathing = false
 }: FlightDeckOrbProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const uniformsRef = useRef<any>(null);
+  const breathingRef = useRef<boolean>(isBreathing);
+
+  useEffect(() => {
+    breathingRef.current = isBreathing;
+  }, [isBreathing]);
 
   // Cursor interpolation state
   const mouseState = useRef({
@@ -274,7 +281,13 @@ export default function FlightDeckOrb({
 
       // Mouse speed adds to displacement amplitude, then decays
       const speedBoost = Math.min(m.speed * 0.8, 0.4);
-      uniforms.u_displacementAmp.value = 0.28 + speedBoost;
+      let baseAmp = 0.28;
+      if (breathingRef.current) {
+        // 4-second box breathing sine wave: expand on inhale, contract on exhale
+        const breath = Math.sin(elapsedTime * (Math.PI / 2.0)) * 0.12;
+        baseAmp = 0.32 + breath;
+      }
+      uniforms.u_displacementAmp.value = baseAmp + speedBoost;
       m.speed *= 0.92; // Decay speed boost
 
       renderer.render(scene, camera);

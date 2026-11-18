@@ -16,10 +16,12 @@ import VoiceMemoPanel from "@/components/VoiceMemoPanel";
 import SpectrogramRibbon from "@/components/SpectrogramRibbon";
 import ActiveTabMonitorPanel from "@/components/ActiveTabMonitorPanel";
 import FlightDeckCopilot from "@/components/FlightDeckCopilot";
+import OrbTacticalHub from "@/components/OrbTacticalHub";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
 
 export default function FlightDeckPage() {
   const { mode, audioEnergy, isPhaseShifting, timelineSegments, setMode, setTimelineSegments } = useFlightDeckStore();
+  const [isBreathing, setIsBreathing] = React.useState(false);
 
   // Load live timeline segments from SQLite backend
   useEffect(() => {
@@ -91,10 +93,14 @@ export default function FlightDeckPage() {
             mode={mode}
             audioEnergy={audioEnergy}
             isPhaseShifting={isPhaseShifting}
+            isBreathing={isBreathing}
           />
 
           {/* 24-Hour Activity Dial Ring */}
           <DialRing segments={timelineSegments} />
+
+          {/* Holographic Orb Tactical Hub: Pomodoro Flow Pacer & Orbital Action Satellites */}
+          <OrbTacticalHub onBreathingChange={setIsBreathing} />
 
           {/* Micro HUD Labels inside Orb Section */}
           <div className="absolute top-4 left-5 flex items-center space-x-2">
