@@ -1,23 +1,23 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P1-T03 | Last updated: 2026-11-18 10:32
+Status: IN PROGRESS | Current: P2-T01 | Last updated: 2026-11-18 10:37
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
       Done when: `npm run build` succeeds cleanly.
 - [x] P1-T02 Implement Flight Deck design tokens (OKLCH CSS variables, fonts, etched panels, corner ticks, film grain)
       Done when: tokens are used by at least one rendered component
-- [ ] P1-T03 Implement Three.js interactive 3D Orb with Simplex noise vertex displacement and Fresnel rim glow
+- [x] P1-T03 Implement Three.js interactive 3D Orb with Simplex noise vertex displacement and Fresnel rim glow
       Done when: Orb renders at 60 FPS in canvas, responds to mouse cursor with inertia/lerp.
-- [ ] P1-T04 Implement 24-Hour Timeline Dial Ring around the orb with arc segments and hover tooltip
+- [x] P1-T04 Implement 24-Hour Timeline Dial Ring around the orb with arc segments and hover tooltip
       Done when: 24h dial ring encircles orb with interactive time marker.
-- [ ] P1-T05 Implement Audio-Reactive shader uniforms and Phase-Shift state transitions
+- [x] P1-T05 Implement Audio-Reactive shader uniforms and Phase-Shift state transitions
       Done when: mode switches trigger contract-shockwave-expand animation and smooth color lerp.
-- [ ] P1-T06 Build Flight Deck Cockpit layout (Asymmetric bento grid, segmented mode control, boot sequence, ⌘K palette)
+- [x] P1-T06 Build Flight Deck Cockpit layout (Asymmetric bento grid, segmented mode control, boot sequence, ⌘K palette)
       Done when: Dashboard shell renders with tactile segmented controls, ⌘K command palette, and boot sequence.
 ### Phase 1 Gate
-- [ ] Build, lint, and typecheck clean
-- [ ] Anti-generic checklist passed (no purple SaaS gradients, no default Inter, etched tactile panels)
-- [ ] Committed: `phase-1: flight deck 3d orb and dashboard shell`
+- [x] Build, lint, and typecheck clean
+- [x] Anti-generic checklist passed (no purple SaaS gradients, no default Inter, etched tactile panels)
+- [x] Committed: `phase-1: flight deck 3d orb and dashboard shell`
 
 ## Phase 2: Local Backend, SQLite Storage & Context Classifier
 - [ ] P2-T01 Scaffold FastAPI backend on 127.0.0.1:4000 with strict CORS and SQLite WAL initialization

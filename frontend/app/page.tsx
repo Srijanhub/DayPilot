@@ -1,69 +1,124 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useEffect } from "react";
+import CockpitHeader from "@/components/CockpitHeader";
+import FlightDeckOrb from "@/components/FlightDeckOrb";
+import DialRing from "@/components/DialRing";
+import CommandPalette from "@/components/CommandPalette";
+import BootSequence from "@/components/BootSequence";
+import MorningBriefingPanel from "@/components/MorningBriefingPanel";
+import BossCoderGitHubPanel from "@/components/BossCoderGitHubPanel";
+import MediaResumePanel from "@/components/MediaResumePanel";
+import MusicPlayerPanel from "@/components/MusicPlayerPanel";
+import NewspaperPanel from "@/components/NewspaperPanel";
+import VoiceMemoPanel from "@/components/VoiceMemoPanel";
+import SpectrogramRibbon from "@/components/SpectrogramRibbon";
+import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
+
+export default function FlightDeckPage() {
+  const { mode, audioEnergy, isPhaseShifting, timelineSegments, setMode } = useFlightDeckStore();
+
+  // Connect to local backend WebSocket for real-time telemetry updates
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket("ws://127.0.0.1:4000/ws/state");
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "MODE_CHANGE" || payload.type === "INITIAL_STATE") {
+            if (payload.data && payload.data.mode) {
+              setMode(payload.data.mode as FlightMode);
+            }
+          }
+        } catch (err) {}
+      };
+    } catch (e) {
+      // Backend offline, fallback to local state
+    }
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [setMode]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-primary)] relative select-none">
+      {/* Boot Telemetry Screen */}
+      <BootSequence />
+
+      {/* Global ⌘K Command Palette */}
+      <CommandPalette />
+
+      {/* Top Cockpit Header & Mode Switcher */}
+      <CockpitHeader />
+
+      {/* Cockpit HUD Workspace */}
+      <div className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+        
+        {/* Top Hero Section: The Central 3D Instrument */}
+        <div className="relative w-full h-[480px] rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden flex items-center justify-center">
+          {/* Subtle Radar Background Grid */}
+          <div
+            className="absolute inset-0 opacity-15 pointer-events-none"
+            style={{
+              backgroundImage: "radial-gradient(circle, oklch(1 0 0 / 0.15) 1px, transparent 1px)",
+              backgroundSize: "24px 24px"
+            }}
+          />
+
+          {/* 3D Glowing WebGL Orb */}
+          <FlightDeckOrb
+            mode={mode}
+            audioEnergy={audioEnergy}
+            isPhaseShifting={isPhaseShifting}
+          />
+
+          {/* 24-Hour Activity Dial Ring */}
+          <DialRing segments={timelineSegments} />
+
+          {/* Micro HUD Labels inside Orb Section */}
+          <div className="absolute top-4 left-5 flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-pulse" />
+            <span className="instrument-label text-[10px] text-[var(--accent-primary)]">
+              ACTIVE MENTAL STATE: [{mode}]
+            </span>
+          </div>
+
+          <div className="absolute top-4 right-5 text-[10px] font-mono text-[var(--text-muted)]">
+            FPS: 60 • GPU DPR: 2.0 • SHADER: PERLIN_FRESNEL
+          </div>
+
+          <div className="absolute bottom-4 text-center font-mono text-xs text-[var(--text-muted)] pointer-events-none">
+            Move cursor to tilt instrument • 24h dial ring tracks today's active flow
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Bento Grid: Modules & Streams */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column (5 Cols) */}
+          <div className="lg:col-span-5 space-y-6">
+            <MorningBriefingPanel />
+            <NewspaperPanel />
+          </div>
+
+          {/* Right Column (7 Cols) */}
+          <div className="lg:col-span-7 space-y-6">
+            <BossCoderGitHubPanel />
+            <MediaResumePanel />
+            <MusicPlayerPanel />
+            <VoiceMemoPanel />
+          </div>
         </div>
-      </main>
-    </div>
+
+        {/* Bottom Full-Width Ribbon: 24h Spectrogram & Retrospective */}
+        <SpectrogramRibbon />
+
+      </div>
+
+      {/* Footer */}
+      <footer className="w-full border-t border-[var(--border-hairline)] py-3 px-6 text-center text-[10px] font-mono text-[var(--text-muted)]">
+        DAYPILOT v1.0.0 • 100% PRIVATE LOCAL-FIRST WORKSTATION • MAC OS DARWIN
+      </footer>
+    </main>
   );
 }
