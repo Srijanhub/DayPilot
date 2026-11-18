@@ -124,6 +124,7 @@ export default function FlightDeckPage() {
           {/* Left Column (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
             <ActiveTabMonitorPanel />
+            <VoiceMemoPanel />
             <MorningBriefingPanel />
             <NewspaperPanel />
           </div>
@@ -134,7 +135,6 @@ export default function FlightDeckPage() {
             <BossCoderGitHubPanel />
             <MediaResumePanel />
             <MusicPlayerPanel />
-            <VoiceMemoPanel />
           </div>
         </div>
 
