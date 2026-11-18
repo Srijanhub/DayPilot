@@ -1,5 +1,5 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P3-T01 | Last updated: 2026-11-18 10:38
+Status: IN PROGRESS | Current: P4-T01 | Last updated: 2026-11-18 10:38
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
@@ -35,19 +35,19 @@ Status: IN PROGRESS | Current: P3-T01 | Last updated: 2026-11-18 10:38
 - [x] Committed: `phase-2: backend core, sqlite wal, and context classifier`
 
 ## Phase 3: Browser Extension (Manifest V3) & Media Scrapers
-- [ ] P3-T01 Scaffold Chrome Extension MV3 with service worker, alarms, and offline batch queue
+- [x] P3-T01 Scaffold Chrome Extension MV3 with service worker, alarms, and offline batch queue
       Done when: Extension loads unpacked with valid manifest and alarm loop.
-- [ ] P3-T02 Implement focused active tab tracker with idle detection and domain exclusions
+- [x] P3-T02 Implement focused active tab tracker with idle detection and domain exclusions
       Done when: Only focused non-idle tab sends heartbeats; incognito and excluded domains ignored.
-- [ ] P3-T03 Implement null-safe Manhwa/Manga scraper (Webtoons, Asura, Flame, MangaDex, Reaper)
+- [x] P3-T03 Implement null-safe Manhwa/Manga scraper (Webtoons, Asura, Flame, MangaDex, Reaper)
       Done when: Scrapes series title and chapter number without runtime exceptions on non-matching tabs.
-- [ ] P3-T04 Implement Video Streaming scraper (Netflix, Crunchyroll, Aniwatch, YouTube)
+- [x] P3-T04 Implement Video Streaming scraper (Netflix, Crunchyroll, Aniwatch, YouTube)
       Done when: Captures video title, episode, duration, and timestamp offset.
-- [ ] P3-T05 Implement YouTube Music MediaSession relay and popup status UI
+- [x] P3-T05 Implement YouTube Music MediaSession relay and popup status UI
       Done when: Popup shows active mode, pause toggle, and media session metadata relay works.
 ### Phase 3 Gate
-- [ ] Extension manifest linted and verified
-- [ ] Committed: `phase-3: chrome extension mv3 with media scrapers`
+- [x] Extension manifest linted and verified
+- [x] Committed: `phase-3: chrome extension mv3 with media scrapers`
 
 ## Phase 4: Integrations, Morning Ignition & Voice Memos
 - [ ] P4-T01 Implement Google Calendar and Gmail collectors (OAuth + graceful offline stub)
