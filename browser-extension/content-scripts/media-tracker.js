@@ -10,7 +10,7 @@
 
   // 1. MANHWA / MANGA DETECTION (Null-safe extraction)
   const isManhwaSite = [
-    "asura", "flamecomics", "mangadex", "webtoons", "reaper"
+    "asura", "flamecomics", "mangadex", "webtoons", "reaper", "toongod"
   ].some(site => hostname.includes(site));
 
   if (isManhwaSite) {
@@ -18,8 +18,8 @@
     let chapterNum = "";
 
     // Null-safe extraction strategy 1: URL Route matching
-    // Example: /series/solo-leveling/chapter-120/ or /title/123-series-name/chapter-45
-    const urlSeriesMatch = pathname.match(/(?:series|title|manga)\/([^\/]+)/i);
+    // Example: /webtoon/academys-genius-swordsman/chapter-76/ or /series/solo-leveling/chapter-120/
+    const urlSeriesMatch = pathname.match(/(?:webtoon|series|title|manga)\/([^\/]+)/i);
     if (urlSeriesMatch && urlSeriesMatch[1]) {
       seriesTitle = urlSeriesMatch[1].replace(/[-_]/g, " ").trim();
       // Capitalize words

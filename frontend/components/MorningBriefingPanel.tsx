@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sparkles, Clock, RefreshCw } from "lucide-react";
+import { Sparkles, Clock, ExternalLink, Calendar, CheckCircle } from "lucide-react";
 
 interface BriefingData {
   morning_quote: string;
   morning_quote_author: string;
   priority_focus: string;
-  schedule_blocks: Array<{ time: string; task: string; mode: string }>;
-  priority_emails: Array<{ from: string; subject: string; time: string; priority: string }>;
+  schedule_blocks: Array<{ time: string; task: string; mode: string; url?: string }>;
+  calendar_events?: Array<{ id: string; time: string; title: string; type: string; url?: string; concern?: string }>;
 }
 
 export default function MorningBriefingPanel() {
@@ -24,68 +24,82 @@ export default function MorningBriefingPanel() {
   }, []);
 
   return (
-    <div className="etched-panel rounded-xl p-5 flex flex-col justify-between space-y-4">
+    <div className="etched-panel rounded-xl p-5 flex flex-col justify-between space-y-5">
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="instrument-label text-[var(--accent-primary)] font-bold">
-            09:00 AM IGNITION // MISSION PLAN
-          </span>
-          <span className="text-[10px] font-mono text-[var(--text-muted)]">LIVE SYNTHESIS</span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-4 h-4 text-[var(--accent-primary)]" />
+            <span className="instrument-label text-[var(--accent-primary)] font-bold">
+              09:00 AM IGNITION // MISSION PLAN
+            </span>
+          </div>
+          <a
+            href="https://calendar.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] font-mono text-[var(--text-muted)] hover:text-white flex items-center space-x-1 px-2 py-0.5 rounded border border-[var(--border-hairline)] hover:border-[var(--accent-primary)] transition"
+          >
+            <span>CALENDAR</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </a>
         </div>
 
         {/* Priority Focus Directive */}
-        <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-4">
+        <div className="p-3.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-4">
           <div className="text-[11px] font-mono text-[var(--accent-primary)] mb-1 flex items-center space-x-1.5">
             <Sparkles className="w-3.5 h-3.5" />
             <span>PRIMARY DIRECTIVE</span>
           </div>
-          <div className="text-sm font-semibold text-white">
+          <div className="text-sm font-semibold text-white leading-relaxed">
             {briefing?.priority_focus || "Loading daily mission directive..."}
           </div>
         </div>
 
-        {/* Schedule Blocks */}
-        <div className="space-y-2 mb-4">
-          <div className="instrument-label text-[9px] text-[var(--text-muted)] mb-1.5">
-            PLANNED FOCUS BLOCKS
-          </div>
-          {briefing?.schedule_blocks?.map((s, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-xs"
-            >
-              <div className="flex items-center space-x-2.5">
-                <Clock className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                <span className="font-mono text-[11px] text-[var(--accent-primary)]">{s.time}</span>
-                <span className="text-white font-medium truncate max-w-[190px]">{s.task}</span>
-              </div>
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                {s.mode}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Priority Emails */}
-        <div className="space-y-1.5">
+        {/* Planned Focus Blocks */}
+        <div className="space-y-2">
           <div className="instrument-label text-[9px] text-[var(--text-muted)] mb-1">
-            GMAIL PRIORITY DIGEST
+            PLANNED FOCUS BLOCKS & DEADLINES (CLICK TO OPEN)
           </div>
-          {briefing?.priority_emails?.map((e, idx) => (
-            <div key={idx} className="flex items-start justify-between text-xs p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
-              <div className="truncate mr-2">
-                <div className="text-[11px] font-medium text-slate-200">{e.from}</div>
-                <div className="text-[10px] text-slate-400 truncate">{e.subject}</div>
-              </div>
-              <span className="font-mono text-[10px] text-[var(--text-muted)] whitespace-nowrap">{e.time}</span>
+          {(!briefing?.schedule_blocks || briefing.schedule_blocks.length === 0) ? (
+            <div className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-center font-mono text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+              <span>NO SCHEDULED CONFLICTS // OPEN AGENDA</span>
             </div>
-          ))}
+          ) : (
+            briefing.schedule_blocks.map((s, idx) => {
+              const targetUrl = s.url || "https://calendar.google.com";
+
+              return (
+                <a
+                  key={idx}
+                  href={targetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-hairline)] hover:border-[var(--accent-primary)] text-xs transition group cursor-pointer"
+                >
+                  <div className="flex items-center space-x-2.5 truncate mr-2">
+                    <Clock className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                    <span className="font-mono text-[11px] text-[var(--accent-primary)] font-bold shrink-0">
+                      {s.time}
+                    </span>
+                    <span className="text-white font-medium truncate group-hover:text-[var(--accent-primary)] transition">
+                      {s.task}
+                    </span>
+                    <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition text-[var(--accent-primary)] shrink-0" />
+                  </div>
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
+                    {s.mode}
+                  </span>
+                </a>
+              );
+            })
+          )}
         </div>
       </div>
 
       {/* Quote of the Day */}
       <div className="border-t border-[var(--border-hairline)] pt-3 text-center">
-        <p className="quote-serif text-sm text-slate-300">
+        <p className="quote-serif text-sm text-slate-300 italic">
           "{briefing?.morning_quote || "First, solve the problem. Then, write the code."}"
         </p>
         <span className="text-[10px] font-mono text-[var(--text-muted)] mt-1 block">

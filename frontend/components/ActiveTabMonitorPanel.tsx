@@ -160,32 +160,42 @@ export default function ActiveTabMonitorPanel() {
 
         {/* Scrollable list of tabs */}
         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-          {filteredHistory.map((item, idx) => (
-            <div
-              key={idx}
-              className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] hover:border-[var(--border-active)] transition flex items-center justify-between text-xs group"
-            >
-              <div className="truncate mr-3">
-                <div className="font-medium text-white truncate group-hover:text-[var(--accent-primary)] transition">
-                  {item.title}
-                </div>
-                <div className="text-[10px] font-mono text-[var(--text-muted)] flex items-center space-x-2 mt-0.5">
-                  <span className="text-slate-400">{item.domain}</span>
-                  <span className="text-slate-600">•</span>
-                  <span>last seen: {item.last_active ? item.last_active.split(" ")[1] : "Today"}</span>
-                </div>
-              </div>
+          {filteredHistory.map((item, idx) => {
+            const hasUrl = Boolean(item.url);
+            const Component = hasUrl ? "a" : "div";
+            const linkProps = hasUrl ? { href: item.url, target: "_blank", rel: "noopener noreferrer" } : {};
 
-              <div className="flex items-center space-x-3 whitespace-nowrap">
-                <span className="font-mono text-xs font-bold text-white">
-                  {item.formatted_time}
-                </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                  {item.category}
-                </span>
-              </div>
-            </div>
-          ))}
+            return (
+              <Component
+                key={idx}
+                {...linkProps}
+                className="p-2.5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-hairline)] hover:border-[var(--border-active)] transition flex items-center justify-between text-xs group cursor-pointer block"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="truncate mr-3">
+                    <div className="font-medium text-white truncate group-hover:text-[var(--accent-primary)] transition flex items-center space-x-1.5">
+                      <span className="truncate">{item.title}</span>
+                      {hasUrl && <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition text-[var(--accent-primary)] shrink-0" />}
+                    </div>
+                    <div className="text-[10px] font-mono text-[var(--text-muted)] flex items-center space-x-2 mt-0.5">
+                      <span className="text-slate-400">{item.domain}</span>
+                      <span className="text-slate-600">•</span>
+                      <span>last seen: {item.last_active ? item.last_active.split(" ")[1] : "Today"}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 whitespace-nowrap shrink-0">
+                    <span className="font-mono text-xs font-bold text-white">
+                      {item.formatted_time}
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                      {item.category}
+                    </span>
+                  </div>
+                </div>
+              </Component>
+            );
+          })}
         </div>
       </div>
     </div>

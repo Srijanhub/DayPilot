@@ -32,16 +32,16 @@ def seed_demo_data():
         ("com.microsoft.VSCode", "daypilot/frontend - Visual Studio Code", "github.com", "https://github.com/daypilot", "WORK", 9000),
         # 11:30 - 13:00 BossCoder Dynamic Programming Study
         ("Google Chrome", "Dynamic Programming Lab 4 | BossCoder Academy", "school.bosscoderacademy.com", "https://school.bosscoderacademy.com/home", "STUDY", 5400),
-        # 13:00 - 13:45 Manhwa reading break
-        ("Google Chrome", "The Greatest Estate Developer - Chapter 148 - Asura Scans", "asuracomic.net", "https://asuracomic.net/series/the-greatest-estate-developer/chapter-148", "RELAX", 2700),
+        # 13:00 - 13:45 Manhwa reading break on ToonGod
+        ("Opera GX", "Read Academy’s Genius Swordsman Chapter 76 Online - ToonGod", "toongod.org", "https://www.toongod.org/webtoon/academys-genius-swordsman/chapter-76/", "RELAX", 2700),
         # 14:00 - 16:30 GitHub PR Review & Terminal
         ("com.apple.Terminal", "zsh - daypilot git commit", "github.com", "https://github.com/daypilot/pull/42", "WORK", 9000),
-        # 16:30 - 17:30 Arcane Streaming
-        ("Google Chrome", "Netflix - Arcane: Season 2 (Episode 4)", "netflix.com", "https://netflix.com/watch/arcane-s2-e4", "RELAX", 3600),
-        # 19:30 - 20:30 Solo Leveling Manhwa
-        ("Google Chrome", "Solo Leveling: Ragnarok - Chapter 36 - Flame Comics", "flamecomics.me", "https://flamecomics.me/series/solo-leveling-ragnarok/chapter-36", "RELAX", 3600),
+        # 16:30 - 17:30 Crunchyroll Streaming
+        ("Opera GX", "Watch The Exiled Heavy Knight Knows How to Game the System - Crunchyroll", "crunchyroll.com", "https://www.crunchyroll.com/watch/GE00378023JAJP/existence-evolution", "RELAX", 3600),
+        # 19:30 - 20:30 Academy's Genius Swordsman
+        ("Opera GX", "Read Academy’s Genius Swordsman Chapter 75 Online - ToonGod", "toongod.org", "https://www.toongod.org/webtoon/academys-genius-swordsman/chapter-75/", "RELAX", 3600),
         # 20:30 - 22:00 BossCoder Live Class
-        ("Google Chrome", "Live Mentorship Session: Graph BFS/DFS | BossCoder", "school.bosscoderacademy.com", "https://school.bosscoderacademy.com/live", "STUDY", 5400),
+        ("Opera GX", "Live Mentorship Session: Graph BFS/DFS | BossCoder", "school.bosscoderacademy.com", "https://school.bosscoderacademy.com/live", "STUDY", 5400),
     ]
 
     for app, title, dom, url, cat, dur in activities:
@@ -52,9 +52,10 @@ def seed_demo_data():
 
     # 2. Seed Media Bookmarks ("Where I Left Off")
     bookmarks = [
-        ("MANHWA", "The Greatest Estate Developer", "Chapter 148", None, "https://asuracomic.net/series/the-greatest-estate-developer/chapter-148"),
-        ("MANHWA", "Solo Leveling: Ragnarok", "Chapter 36", None, "https://flamecomics.me/series/solo-leveling-ragnarok/chapter-36"),
-        ("SHOW", "Arcane: Season 2", "Episode 4", "34:12", "https://netflix.com/watch/arcane-s2-e4"),
+        ("MANHWA", "Academy’s Genius Swordsman", "Chapter 76", None, "https://www.toongod.org/webtoon/academys-genius-swordsman/chapter-76/"),
+        ("SHOW", "The Exiled Heavy Knight Knows How to Game the System", "S1 E4 - Existence Evolution", "18:40", "https://www.crunchyroll.com/watch/GE00378023JAJP/existence-evolution"),
+        ("SHOW", "Soul Eater", "Episode 4 - Engage the Witch Hunter!", "15:20", "https://www.crunchyroll.com/watch/G63V83XEY/engage-the-witch-hunter-a-remedial-lesson-in-the-graveyard"),
+        ("SHOW", "Firefly Wedding", "S1 E6 - Honest Feelings", "20:10", "https://www.crunchyroll.com/watch/GE00384160JAJP/honest-feelings"),
     ]
 
     for mtype, title, unit, offset, url in bookmarks:

@@ -18,6 +18,7 @@ class ScheduleBlock(BaseModel):
     time: str
     task: str
     mode: str = Field(description="WORK, STUDY, or RELAX")
+    url: Optional[str] = None
 
 
 class MorningBriefingSchema(BaseModel):
@@ -45,9 +46,24 @@ def synthesize_morning_briefing() -> MorningBriefingSchema:
     newspaper = get_morning_newspaper()
 
     schedule_blocks = [
-        ScheduleBlock(time="10:00 - 11:30 AM", task="Deep Work: BossCoder DP Lab 4 Submission", mode="STUDY"),
-        ScheduleBlock(time="02:00 - 02:45 PM", task="Review GitHub PR #42 & merge", mode="WORK"),
-        ScheduleBlock(time="08:00 - 09:30 PM", task="BossCoder Live Mentorship: Graph BFS/DFS", mode="STUDY")
+        ScheduleBlock(
+            time="10:00 - 11:30 AM",
+            task="Deep Work: BossCoder DP Lab 4 Submission",
+            mode="STUDY",
+            url="https://school.bosscoderacademy.com/home"
+        ),
+        ScheduleBlock(
+            time="02:00 - 02:45 PM",
+            task="Review GitHub PR #42 & merge",
+            mode="WORK",
+            url="https://github.com/notifications"
+        ),
+        ScheduleBlock(
+            time="08:00 - 09:30 PM",
+            task="BossCoder Live Mentorship: Graph BFS/DFS",
+            mode="STUDY",
+            url="https://school.bosscoderacademy.com/home"
+        )
     ]
 
     newspaper_digest = [n["headline"] for n in newspaper]

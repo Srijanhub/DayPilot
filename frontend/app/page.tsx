@@ -7,6 +7,7 @@ import DialRing from "@/components/DialRing";
 import CommandPalette from "@/components/CommandPalette";
 import BootSequence from "@/components/BootSequence";
 import MorningBriefingPanel from "@/components/MorningBriefingPanel";
+import GmailDigestPanel from "@/components/GmailDigestPanel";
 import BossCoderGitHubPanel from "@/components/BossCoderGitHubPanel";
 import MediaResumePanel from "@/components/MediaResumePanel";
 import MusicPlayerPanel from "@/components/MusicPlayerPanel";
@@ -122,6 +123,7 @@ export default function FlightDeckPage() {
 
           {/* Right Column (7 Cols) */}
           <div className="lg:col-span-7 space-y-6">
+            <GmailDigestPanel />
             <BossCoderGitHubPanel />
             <MediaResumePanel />
             <MusicPlayerPanel />

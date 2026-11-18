@@ -39,8 +39,8 @@ class ContextClassifier:
 
         self.relax_domains = {
             "netflix.com", "crunchyroll.com", "aniwatch", "asura", "flamecomics",
-            "mangadex.org", "webtoons.com", "reaperscans", "twitch.tv", "reddit.com",
-            "twitter.com", "x.com", "instagram.com"
+            "toongod.org", "toongod", "mangadex.org", "webtoons.com", "reaperscans",
+            "twitch.tv", "reddit.com", "twitter.com", "x.com", "instagram.com"
         }
 
     def classify_target(self, app_name: str, domain: Optional[str] = None, title: Optional[str] = None) -> str:

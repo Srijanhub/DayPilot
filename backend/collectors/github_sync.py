@@ -38,13 +38,17 @@ def get_github_notifications() -> List[Dict[str, Any]]:
             "pr": "#42",
             "title": "feat: add simplex noise 3D orb shader",
             "author": "srijanhalder",
-            "status": "REVIEW REQUESTED"
+            "status": "REVIEW REQUESTED",
+            "url": "https://github.com/notifications",
+            "concern": "Your review was requested on pull request #42."
         },
         {
             "repo": "backend-engine",
             "pr": "#18",
             "title": "fix: 120s hysteresis debounce classifier",
             "author": "teammate",
-            "status": "APPROVED"
+            "status": "APPROVED",
+            "url": "https://github.com/notifications",
+            "concern": "PR #18 was approved and is ready to merge."
         }
     ]

@@ -16,7 +16,9 @@ def get_bosscoder_alerts() -> List[Dict[str, Any]]:
             "type": "ASSIGNMENT",
             "deadline": "Today, 4:00 PM",
             "status": "PENDING SUBMISSION",
-            "urgency": "HIGH"
+            "urgency": "HIGH",
+            "url": "https://school.bosscoderacademy.com/home",
+            "concern": "Assignment deadline approaching today at 4:00 PM IST."
         },
         {
             "id": "bc_lec_12",
@@ -24,7 +26,9 @@ def get_bosscoder_alerts() -> List[Dict[str, Any]]:
             "type": "LECTURE",
             "deadline": "Today, 8:00 PM - 9:30 PM",
             "status": "STARTS IN 9H",
-            "urgency": "MEDIUM"
+            "urgency": "MEDIUM",
+            "url": "https://school.bosscoderacademy.com/home",
+            "concern": "Live cohort class scheduled for 8:00 PM tonight."
         },
         {
             "id": "bc_contest_28",
@@ -32,6 +36,8 @@ def get_bosscoder_alerts() -> List[Dict[str, Any]]:
             "type": "CONTEST",
             "deadline": "Saturday, 7:00 PM",
             "status": "UPCOMING",
-            "urgency": "NORMAL"
+            "urgency": "NORMAL",
+            "url": "https://school.bosscoderacademy.com/home",
+            "concern": "Weekend rated contest registration."
         }
     ]
