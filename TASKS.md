@@ -1,5 +1,5 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P6-T01 | Last updated: 2026-11-18 10:41
+Status: COMPLETED | Current: DONE | Last updated: 2026-11-18 10:43
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
@@ -80,18 +80,18 @@ Status: IN PROGRESS | Current: P6-T01 | Last updated: 2026-11-18 10:41
 - [x] Committed: `phase-5: ad-free music engine and preference learning`
 
 ## Phase 6: Nightly Retrospective, macOS Daemons & Demo Seed
-- [ ] P6-T01 Implement 01:00 AM Nightly Retrospective generator with Spectrogram Ribbon and Focus Score
+- [x] P6-T01 Implement 01:00 AM Nightly Retrospective generator with Spectrogram Ribbon and Focus Score
       Done when: Computes stats, generates custom SVG spectrogram ribbon and 0-100 Focus Score.
-- [ ] P6-T02 Implement Cartridge-style Resume Cards for manhwa and shows
+- [x] P6-T02 Implement Cartridge-style Resume Cards for manhwa and shows
       Done when: Renders resume cards with direct links and progress bars.
-- [ ] P6-T03 Implement Planned vs Completed Flight Log audit with carried-over task scheduler
+- [x] P6-T03 Implement Planned vs Completed Flight Log audit with carried-over task scheduler
       Done when: Flight log vertical timeline shows completed items and carries over unfinished items.
-- [ ] P6-T04 Create Realistic Demo Seed script (`seed_demo.py`)
+- [x] P6-T04 Create Realistic Demo Seed script (`seed_demo.py`)
       Done when: Running seed script populates SQLite with realistic daily telemetry and bookmarks.
-- [ ] P6-T05 Implement macOS launchd plists (`com.daypilot.morning.plist`, `com.daypilot.nightly.plist`) and install/uninstall scripts
+- [x] P6-T05 Implement macOS launchd plists (`com.daypilot.morning.plist`, `com.daypilot.nightly.plist`) and install/uninstall scripts
       Done when: Plists and scripts written with catch-up logic on wake.
-- [ ] P6-T06 Comprehensive system test, documentation, and README
+- [x] P6-T06 Comprehensive system test, documentation, and README
       Done when: Full end-to-end verification passes, clean code audit, and final report generated.
 ### Phase 6 Gate
-- [ ] All checks passed, README and documentation complete
-- [ ] Committed: `phase-6: nightly retrospective, macos launchd, seed script, and final docs`
+- [x] All checks passed, README and documentation complete
+- [x] Committed: `phase-6: nightly retrospective, macos launchd, seed script, and final docs`
