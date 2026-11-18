@@ -99,6 +99,88 @@ async def websocket_endpoint(websocket: WebSocket):
             active_websockets.remove(websocket)
 
 
+@app.get("/api/tabs/live")
+def get_live_tab():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT * FROM activity_events
+    ORDER BY id DESC LIMIT 1;
+    """)
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        return {"is_active": False}
+
+    # Count consecutive heartbeats on same title/domain
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT SUM(duration_seconds) as current_dwell
+    FROM (
+        SELECT duration_seconds, window_title
+        FROM activity_events
+        ORDER BY id DESC LIMIT 100
+    )
+    WHERE window_title = ?;
+    """, (row["window_title"],))
+    dwell_row = cursor.fetchone()
+    dwell_sec = dwell_row["current_dwell"] if dwell_row and dwell_row["current_dwell"] else 5
+    conn.close()
+
+    return {
+        "is_active": True,
+        "app_name": row["app_name"],
+        "window_title": row["window_title"] or "Active Window",
+        "domain": row["domain"] or "desktop",
+        "url": row["url"] or "",
+        "category": row["category"] or "WORK",
+        "dwell_seconds": dwell_sec,
+        "last_heartbeat": row["timestamp"]
+    }
+
+
+@app.get("/api/tabs/history")
+def get_tabs_history():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT 
+        COALESCE(window_title, app_name) as title,
+        domain,
+        url,
+        category,
+        SUM(duration_seconds) as total_seconds,
+        MAX(timestamp) as last_active
+    FROM activity_events
+    WHERE date(timestamp) = date('now')
+    GROUP BY COALESCE(window_title, app_name), domain
+    ORDER BY total_seconds DESC;
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        secs = r["total_seconds"] or 0
+        hrs = secs // 3600
+        mins = (secs % 3600) // 60
+        time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m {secs % 60}s"
+
+        results.append({
+            "title": r["title"] or "Untitled Tab",
+            "domain": r["domain"] or "local",
+            "url": r["url"] or "",
+            "category": r["category"] or "WORK",
+            "total_seconds": secs,
+            "formatted_time": time_str,
+            "last_active": r["last_active"]
+        })
+
+    return results
+
+
 @app.get("/api/timeline")
 def get_timeline():
     conn = get_db_connection()

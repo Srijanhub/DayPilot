@@ -13,6 +13,7 @@ import MusicPlayerPanel from "@/components/MusicPlayerPanel";
 import NewspaperPanel from "@/components/NewspaperPanel";
 import VoiceMemoPanel from "@/components/VoiceMemoPanel";
 import SpectrogramRibbon from "@/components/SpectrogramRibbon";
+import ActiveTabMonitorPanel from "@/components/ActiveTabMonitorPanel";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
 
 export default function FlightDeckPage() {
@@ -114,6 +115,7 @@ export default function FlightDeckPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
+            <ActiveTabMonitorPanel />
             <MorningBriefingPanel />
             <NewspaperPanel />
           </div>
