@@ -236,6 +236,7 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
       get().refreshBookmarks();
       get().refreshTimeline();
       get().refreshLiveTab();
+      get().refreshNightlyBriefing();
     } else if (
       type === "GITHUB_UPDATED" ||
       type === "BOSSCODER_UPDATED" ||

@@ -130,15 +130,42 @@ export interface TabHistoryItem {
   last_active: string;
 }
 
+export interface FlightLogItem {
+  title: string;
+  type?: "PLANNED" | "CALENDAR" | "UNPLANNED" | "LEISURE";
+  time: string;
+  status: "COMPLETED" | "PARTIAL" | "CARRIED OVER" | "LEISURE";
+  logged_duration?: string;
+  logged_seconds?: number;
+}
+
+export interface SpectrogramSlot {
+  slot: number;
+  time: string;
+  time_range: string;
+  category: "WORK" | "STUDY" | "MANHWA" | "SHOWS" | "RELAX" | "LEISURE" | "IDLE";
+  intensity: number;
+  height: number;
+  color: string;
+  active_seconds: number;
+  active_minutes: number;
+  idle_minutes: number;
+  top_app: string;
+  category_breakdown?: Record<string, number>;
+}
+
 export interface NightlyBriefing {
   date: string;
   focus_score: number;
   is_demo_data: boolean;
   total_work_seconds: number;
   total_relax_seconds: number;
+  total_work_hours?: number;
+  total_relax_hours?: number;
   category_totals: Record<string, number>;
   bookmarks: MediaBookmark[];
-  flight_log: Array<{ title: string; status: string; time: string }>;
+  flight_log: FlightLogItem[];
+  spectrogram?: SpectrogramSlot[];
   ai_summary: string;
 }
 
@@ -185,6 +212,7 @@ export const daypilotApi = {
   refreshNews: () => apiFetch<NewsPayload>("/api/news/refresh", { method: "POST" }),
   getMorningBriefing: () => apiFetch<MorningBriefing>("/api/briefing/morning"),
   getNightlyBriefing: () => apiFetch<NightlyBriefing>("/api/briefing/nightly"),
+  getSpectrogram: () => apiFetch<SpectrogramSlot[]>("/api/spectrogram"),
   getTimeline: () => apiFetch<TimelineSegment[]>("/api/timeline"),
   getBookmarks: () => apiFetch<MediaBookmark[]>("/api/bookmarks"),
   getMemos: () => apiFetch<VoiceMemo[]>("/api/memos"),

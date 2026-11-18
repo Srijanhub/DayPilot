@@ -555,8 +555,18 @@ async def sync_all_connected_services():
     return report
 
 
+@app.get("/api/spectrogram")
+def get_spectrogram():
+    from collectors.spectrogram import generate_24h_spectrogram
+    start_ts, end_ts = get_today_range()
+    return generate_24h_spectrogram(start_ts, end_ts)
+
+
 @app.get("/api/briefing/nightly")
 def get_nightly_briefing():
+    from collectors.spectrogram import generate_24h_spectrogram, audit_planned_vs_completed
+    from unified_syncer import sync_engine
+
     start_ts, end_ts = get_today_range()
     conn = get_db_connection()
     try:
@@ -574,21 +584,6 @@ def get_nightly_briefing():
         # Query bookmarks
         cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC LIMIT 50;")
         bookmarks = [dict(r) for r in cursor.fetchall()]
-
-        # Query today's top activities for dynamic flight log
-        cursor.execute("""
-        SELECT 
-            COALESCE(window_title, app_name) as title,
-            category,
-            SUM(duration_seconds) as total_seconds,
-            MAX(timestamp) as last_seen
-        FROM activity_events
-        WHERE timestamp >= ? AND timestamp <= ?
-        GROUP BY COALESCE(window_title, app_name), category
-        ORDER BY total_seconds DESC
-        LIMIT 5;
-        """, (start_ts, end_ts))
-        activity_rows = cursor.fetchall()
     finally:
         conn.close()
 
@@ -596,31 +591,33 @@ def get_nightly_briefing():
     total_relax = totals.get("RELAX", 0) + totals.get("LEISURE", 0)
     total_active = total_work + total_relax
 
-    # Calculate dynamic focus score from empirical activity events
+    # Calculate dynamic focus score strictly from empirical activity events
     focus_score = min(100, max(0, round((total_work / total_active) * 100))) if total_active > 0 else 0
 
-    flight_log = []
-    for act in activity_rows:
-        secs = act["total_seconds"] or 0
-        mins = secs // 60
-        cat = act["category"] or "WORK"
-        status = "COMPLETED" if cat in ("WORK", "STUDY") else "LEISURE"
-        last_seen_str = str(act["last_seen"])
-        time_part = last_seen_str.split(" ")[1][:5] if " " in last_seen_str else last_seen_str
-        flight_log.append({
-            "title": f"{act['title']} ({mins}m)",
-            "status": status,
-            "time": time_part
-        })
+    # 48-slot continuous spectrogram based on empirical activity distribution
+    spectrogram_slots = generate_24h_spectrogram(start_ts, end_ts)
 
-    if not flight_log:
-        flight_log = [
-            {"title": "DayPilot Workstation Calibration", "status": "COMPLETED", "time": datetime.now().strftime("%I:%M %p")}
-        ]
+    # Real audit of planned commitments vs actual completed telemetry
+    cached_briefing = sync_engine.get_cached_briefing()
+    flight_log = audit_planned_vs_completed(
+        start_ts,
+        end_ts,
+        cached_briefing.get("schedule_blocks", []),
+        cached_briefing.get("calendar_events", [])
+    )
 
     work_hrs = round(total_work / 3600, 1)
     relax_hrs = round(total_relax / 3600, 1)
-    ai_summary = f"Daily Flight Debrief: Logged {work_hrs}h productive flow (WORK/STUDY) and {relax_hrs}h rest/leisure with an overall focus score of {focus_score}%."
+    completed_tasks = sum(1 for f in flight_log if f.get("status") == "COMPLETED")
+    total_tasks = sum(1 for f in flight_log if f.get("type") in ("PLANNED", "CALENDAR"))
+
+    if total_active > 0:
+        ai_summary = (
+            f"Daily Flight Debrief: Logged {work_hrs}h productive flow (WORK/STUDY) and {relax_hrs}h rest/leisure "
+            f"with an overall focus score of {focus_score}%. Resolved {completed_tasks}/{max(1, total_tasks)} scheduled flight commitments."
+        )
+    else:
+        ai_summary = "Daily Flight Debrief: No activity recorded yet today. DayPilot workstation ready for telemetry ingestion."
 
     return {
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -628,9 +625,12 @@ def get_nightly_briefing():
         "is_demo_data": False,
         "total_work_seconds": total_work,
         "total_relax_seconds": total_relax,
+        "total_work_hours": work_hrs,
+        "total_relax_hours": relax_hrs,
         "category_totals": totals,
         "bookmarks": bookmarks,
         "flight_log": flight_log,
+        "spectrogram": spectrogram_slots,
         "ai_summary": ai_summary
     }
 
