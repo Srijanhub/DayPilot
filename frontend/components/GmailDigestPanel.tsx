@@ -4,6 +4,21 @@ import React from "react";
 import { Mail, ExternalLink, Sparkles, CheckCircle, RefreshCw, Clock, FileText } from "lucide-react";
 import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
+function cleanSummaryText(text: string): string {
+  if (!text) return "No preview available.";
+  return text
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<!\[[\s\S]*?\]>/g, " ")
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, " ")
+    .replace(/<!-{1,2}>/g, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || "No preview available.";
+}
+
 export default function GmailDigestPanel() {
   const { briefing, fetchBriefing, isBriefingLoading } = useFlightDeckStore();
   const emails = briefing?.priority_emails || [];
@@ -58,7 +73,7 @@ export default function GmailDigestPanel() {
           {emails.map((e) => {
             const targetUrl = e.url || `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(e.from || e.subject)}`;
             const isHigh = e.priority === "HIGH" || e.priority === "CRITICAL";
-            const summaryText = e.summary || e.concern || e.snippet || "No preview available.";
+            const summaryText = cleanSummaryText(e.summary || e.concern || e.snippet || "");
 
             return (
               <a

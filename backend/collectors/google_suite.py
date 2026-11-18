@@ -12,6 +12,83 @@ import urllib.request
 import urllib.parse
 from datetime import datetime, date
 from typing import List, Dict, Any
+import re
+import html
+
+
+def clean_email_body(raw_text: str) -> str:
+    """Strips all HTML markup, DOCTYPE, head, style, script, comments, and entities."""
+    if not raw_text:
+        return ""
+
+    # 1. Strip comments including conditional Outlook comments (<!--[if ...]> and malformed <!->)
+    text = re.sub(r'<!--[\s\S]*?-->', ' ', raw_text)
+    text = re.sub(r'<!\[[\s\S]*?\]>', ' ', text)
+    text = re.sub(r'<!DOCTYPE[\s\S]*?>', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<!-{1,2}>', ' ', text)
+    text = re.sub(r'<![^>]*>', ' ', text)
+
+    # 2. Strip <style>, <script>, and <head> blocks with their contents
+    text = re.sub(r'<style[\s\S]*?</style>', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<script[\s\S]*?</script>', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<head[\s\S]*?</head>', ' ', text, flags=re.IGNORECASE)
+
+    # 3. Strip all remaining HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+
+    # 4. Unescape HTML entities (&nbsp;, &amp;, &#39;, etc.)
+    text = html.unescape(text)
+
+    # 5. Remove email image references and markdown image artifacts
+    text = re.sub(r'\[image:[^\]]*\]', '', text)
+    text = re.sub(r'https?://\S+', '', text)
+
+    # 6. Remove standard email marketing boilerplate footers
+    text = re.sub(
+        r'(View in browser|Unsubscribe|Terms and conditions|Privacy Policy|Manage preferences|Preferences|You\'re receiving this email because).*$',
+        '',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 7. Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def extract_email_summary(subject: str, sender: str, body_text: str) -> str:
+    """Generate a clean executive summary of the email content."""
+    clean = clean_email_body(body_text)
+
+    lower_sub = subject.lower()
+    lower_body = clean.lower()
+
+    if "app password created" in lower_body or "app password created" in lower_sub:
+        return "Google confirmed that an App Password was created for DayPilot. No action required if you authorized it."
+    if "shared some google account data" in lower_sub or "account data with" in lower_sub:
+        domain = lower_sub.split("with")[-1].strip() if "with" in lower_sub else "an external app"
+        return f"Google Security Notice: You connected your Google account with {domain}. Review your authorized apps if unexpected."
+    if "new sign-in" in lower_body or "security alert" in lower_sub:
+        if "mac os" in lower_body or "macos" in lower_body:
+            return "Google detected a new sign-in on a macOS device. If this was you, no action is needed."
+        return "Google Security Alert regarding recent sign-in activity on your Google Account."
+    if "review your google account settings" in lower_sub:
+        return "Google recommendation to review and adjust your privacy, backup, and security settings on this device."
+    if "linkedin" in sender.lower() or "job alert" in lower_sub:
+        return f"Career Alert: New matching role found — {subject}."
+
+    # Look for meaningful sentences that are not boilerplate
+    sentences = re.split(r'(?<=[.!?])\s+', clean)
+    meaningful = [
+        s.strip() for s in sentences
+        if len(s.strip()) > 15
+        and not s.lower().startswith(('hi ', 'hello', 'dear ', 'thanks', 'click here', '<!'))
+    ]
+    if meaningful:
+        summary = " ".join(meaningful[:2])
+        return summary[:280] + ("..." if len(summary) > 280 else "")
+
+    return clean[:200] if clean else f"Email regarding: {subject}"
 
 
 def get_calendar_events() -> List[Dict[str, Any]]:
@@ -87,37 +164,6 @@ def get_calendar_events() -> List[Dict[str, Any]]:
     ]
 
 
-def extract_email_summary(subject: str, sender: str, body_text: str) -> str:
-    """Generate a clean executive summary of the email content."""
-    import re
-    clean = re.sub(r'\[image:[^\]]*\]', '', body_text)
-    clean = re.sub(r'https?://\S+', '', clean)
-    clean = re.sub(r'(View in browser|Unsubscribe|Terms and conditions|Privacy Policy).*$', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'\s+', ' ', clean).strip()
-
-    lower_sub = subject.lower()
-    lower_body = clean.lower()
-
-    if "app password created" in lower_body or "app password created" in lower_sub:
-        return f"Google confirmed that an App Password was created for DayPilot. No action required if you authorized it."
-    if "new sign-in" in lower_body or "security alert" in lower_sub:
-        if "mac os" in lower_body:
-            return f"Google detected a new sign-in on a Mac OS device. If this was you, no action is needed."
-        return f"Google Security Alert regarding recent sign-in activity on your Google Account."
-    if "review your google account settings" in lower_sub:
-        return "Google recommendation to review and adjust your privacy, backup, and security settings on this device."
-    if "linkedin" in sender.lower() or "job alert" in lower_sub:
-        return f"Career Alert: New matching role found — {subject}."
-
-    sentences = re.split(r'(?<=[.!?])\s+', clean)
-    meaningful = [s.strip() for s in sentences if len(s.strip()) > 15 and not s.lower().startswith(('hi ', 'hello', 'dear', 'thanks', 'click here'))]
-    if meaningful:
-        summary = " ".join(meaningful[:2])
-        return summary[:280] + ("..." if len(summary) > 280 else "")
-
-    return clean[:200] if clean else f"Email regarding: {subject}"
-
-
 def get_priority_emails() -> List[Dict[str, Any]]:
     gmail_addr = os.environ.get("GMAIL_ADDRESS")
     gmail_pwd = os.environ.get("GMAIL_APP_PASSWORD")
@@ -125,7 +171,7 @@ def get_priority_emails() -> List[Dict[str, Any]]:
     if gmail_addr and gmail_pwd:
         try:
             clean_pwd = gmail_pwd.replace(" ", "").strip()
-            mail = imaplib.IMAP4_SSL("imap.gmail.com")
+            mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
             mail.login(gmail_addr, clean_pwd)
             mail.select("INBOX")
             
@@ -159,27 +205,35 @@ def get_priority_emails() -> List[Dict[str, Any]]:
 
                     # Extract body content
                     body_text = ""
+                    html_text = ""
                     if msg.is_multipart():
                         for part in msg.walk():
                             ctype = part.get_content_type()
-                            if ctype == "text/plain":
-                                payload = part.get_payload(decode=True)
-                                if payload:
-                                    body_text = payload.decode("utf-8", errors="ignore")
-                                    break
-                            elif ctype == "text/html" and not body_text:
-                                payload = part.get_payload(decode=True)
-                                if payload:
-                                    raw_html = payload.decode("utf-8", errors="ignore")
-                                    import re
-                                    body_text = re.sub(r'<[^>]+>', ' ', raw_html)
+                            cdisp = str(part.get("Content-Disposition", ""))
+                            if "attachment" in cdisp:
+                                continue
+                            payload = part.get_payload(decode=True)
+                            if not payload:
+                                continue
+                            charset = part.get_content_charset() or "utf-8"
+                            decoded = payload.decode(charset, errors="ignore")
+                            if ctype == "text/plain" and not body_text:
+                                body_text = decoded
+                            elif ctype == "text/html" and not html_text:
+                                html_text = decoded
                     else:
                         payload = msg.get_payload(decode=True)
                         if payload:
-                            body_text = payload.decode("utf-8", errors="ignore")
+                            charset = msg.get_content_charset() or "utf-8"
+                            decoded = payload.decode(charset, errors="ignore")
+                            if msg.get_content_type() == "text/html":
+                                html_text = decoded
+                            else:
+                                body_text = decoded
 
+                    raw_content = body_text if body_text else html_text
                     clean_sender = sender.split("<")[0].strip().replace('"', '') or sender
-                    summary = extract_email_summary(subject, clean_sender, body_text)
+                    summary = extract_email_summary(subject, clean_sender, raw_content)
                     is_urgent = any(kw in (subject + summary).lower() for kw in ["urgent", "important", "deadline", "action", "review", "due", "security alert"])
                     
                     results.append({
