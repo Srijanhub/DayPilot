@@ -531,6 +531,23 @@ def get_morning_briefing():
     return sync_engine.get_cached_briefing()
 
 
+@app.get("/api/news")
+async def get_news(topic: Optional[str] = None, limit: int = 20):
+    from collectors.newspaper import get_news_payload
+    limit = max(1, min(limit, 50))
+    return await asyncio.to_thread(get_news_payload, topic, limit)
+
+
+@authenticated_router.post("/api/news/refresh")
+async def refresh_news_now():
+    from collectors.newspaper import refresh_news, get_news_payload
+    report = await refresh_news()
+    payload = await asyncio.to_thread(get_news_payload, None, 20)
+    if not report.get("throttled"):
+        await broadcast_state("NEWS_UPDATED", {"new": report["new"]})
+    return {**payload, "refresh": report}
+
+
 @authenticated_router.post("/api/sync/all")
 async def sync_all_connected_services():
     from unified_syncer import sync_engine

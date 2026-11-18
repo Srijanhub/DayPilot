@@ -150,7 +150,39 @@ export interface TimelineSegment {
   duration: string;
 }
 
+export interface NewsArticle {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  topic: string;
+  url: string;
+  discussion_url?: string | null;
+  published: string;
+  published_ts: number;
+  is_new: boolean;
+}
+export interface NewsFeedStatus {
+  name: string;
+  topic: string;
+  ok: boolean;
+  count: number;
+  error?: string | null;
+  not_modified?: boolean;
+}
+export interface NewsPayload {
+  articles: NewsArticle[];
+  topics: Record<string, number>;
+  fetched_at: number | null;
+  stale: boolean;
+  feeds: NewsFeedStatus[];
+  configured_feeds: number;
+}
+
 export const daypilotApi = {
+  getNews: (topic?: string) =>
+    apiFetch<NewsPayload>(`/api/news${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`),
+  refreshNews: () => apiFetch<NewsPayload>("/api/news/refresh", { method: "POST" }),
   getMorningBriefing: () => apiFetch<MorningBriefing>("/api/briefing/morning"),
   getNightlyBriefing: () => apiFetch<NightlyBriefing>("/api/briefing/nightly"),
   getTimeline: () => apiFetch<TimelineSegment[]>("/api/timeline"),

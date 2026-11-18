@@ -17,7 +17,7 @@ from collectors.bosscoder import get_bosscoder_alerts
 from collectors.github_sync import get_github_notifications
 from collectors.google_suite import get_priority_emails, get_calendar_events
 from collectors.quotes import get_quote_of_the_day
-from collectors.newspaper import get_morning_newspaper
+from collectors.newspaper import get_morning_newspaper, refresh_news
 from collectors.briefing_engine import MorningBriefingSchema, ScheduleBlock
 
 
@@ -188,8 +188,7 @@ class UnifiedSyncEngine:
             self.quote_data = get_quote_of_the_day()
         if not self.calendar_data:
             self.calendar_data = get_calendar_events()
-        if not self.newspaper_digest:
-            self.newspaper_digest = get_morning_newspaper()
+        self.newspaper_digest = get_morning_newspaper()
 
         top_bc = self.bosscoder_data[0] if self.bosscoder_data else None
         top_gh = self.github_data[0] if self.github_data else None
@@ -270,6 +269,16 @@ class UnifiedSyncEngine:
             "priority_emails": self.email_data
         }
 
+    async def sync_news(self, force: bool = False):
+        """Fetch live headlines, refresh the digest and tell the UI."""
+        try:
+            report = await refresh_news(force=force)
+            self.rebuild_briefing_cache()
+            if not report.get("throttled"):
+                await self.broadcast("NEWS_UPDATED", {"new": report["new"]})
+        except Exception as e:
+            print(f"[UnifiedSync] Error syncing news: {e}")
+
     def get_cached_briefing(self) -> Dict[str, Any]:
         if not self._cached_briefing:
             self.rebuild_briefing_cache()
@@ -291,7 +300,10 @@ class UnifiedSyncEngine:
         # 4. Gmail (in executor to avoid blocking loop)
         await loop.run_in_executor(None, self.sync_emails)
 
-        # 5. Rebuild briefing
+        # 5. Live news
+        await self.sync_news(force=True)
+
+        # 6. Rebuild briefing
         self.rebuild_briefing_cache()
 
         # Broadcast update
@@ -350,6 +362,10 @@ class UnifiedSyncEngine:
                 await loop.run_in_executor(None, self.sync_emails)
                 self.rebuild_briefing_cache()
                 await self.broadcast("EMAILS_UPDATED", {"emails": len(self.email_data)})
+
+            # Every 600s (10m): fetch fresh headlines
+            if tick % 600 == 0:
+                await self.sync_news()
 
             # Every 3600s (1 hour): prune media bookmarks to top 50
             if tick % 3600 == 0:

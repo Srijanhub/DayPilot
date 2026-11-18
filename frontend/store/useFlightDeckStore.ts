@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { TimelineSegment } from "@/components/DialRing";
+import type { NewsPayload } from "@/lib/api";
 import {
   daypilotApi,
   MorningBriefing,
@@ -32,6 +33,8 @@ interface FlightDeckState {
   nightlyBriefing: NightlyBriefing | null;
   isBriefingLoading: boolean;
   isBookmarksLoading: boolean;
+  news: NewsPayload | null;
+  isNewsRefreshing: boolean;
 
   // Actions
   setMode: (mode: FlightMode) => void;
@@ -52,6 +55,8 @@ interface FlightDeckState {
   refreshTimeline: () => Promise<void>;
   refreshMemos: () => Promise<void>;
   refreshNightlyBriefing: () => Promise<void>;
+  loadNews: () => Promise<void>;
+  refreshNews: () => Promise<void>;
   handleWebSocketMessage: (payload: any, data?: any) => void;
 }
 
@@ -73,6 +78,8 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   nightlyBriefing: null,
   isBriefingLoading: false,
   isBookmarksLoading: false,
+  news: null,
+  isNewsRefreshing: false,
 
   setMode: (mode) => {
     document.body.setAttribute("data-mode", mode);
@@ -193,11 +200,32 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
     } catch (e) {}
   },
 
+  loadNews: async () => {
+    try {
+      set({ news: await daypilotApi.getNews() });
+    } catch (e) {}
+  },
+
+  refreshNews: async () => {
+    set({ isNewsRefreshing: true });
+    try {
+      set({ news: await daypilotApi.refreshNews() });
+    } catch (e) {
+    } finally {
+      set({ isNewsRefreshing: false });
+    }
+  },
+
   handleWebSocketMessage: (payload: any, maybeData?: any) => {
     const type = typeof payload === "string" ? payload : payload?.type;
     const data = typeof payload === "string" ? maybeData : payload?.data;
 
     if (!type) return;
+
+    if (type === "NEWS_UPDATED") {
+      get().loadNews();
+      return;
+    }
 
     if (type === "MODE_CHANGE" || type === "INITIAL_STATE") {
       if (data && data.mode) {

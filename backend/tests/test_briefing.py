@@ -6,7 +6,9 @@ import pytest
 from collectors.briefing_engine import synthesize_morning_briefing, MorningBriefingSchema
 
 
-def test_morning_briefing_schema():
+def test_morning_briefing_schema(monkeypatch):
+    sample = [{"headline": f"Story {i}", "topic": "TECH", "source": "Test", "url": f"https://example.com/{i}"} for i in range(3)]
+    monkeypatch.setattr("collectors.briefing_engine.get_morning_newspaper", lambda *a, **k: sample)
     briefing = synthesize_morning_briefing()
     assert isinstance(briefing, MorningBriefingSchema)
     assert len(briefing.morning_quote) > 0

@@ -105,6 +105,23 @@ def init_db():
     );
     """)
 
+    # Live news cache (survives restarts, works offline)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS news_articles (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        summary TEXT,
+        source TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        discussion_url TEXT,
+        published REAL NOT NULL,
+        first_seen REAL NOT NULL,
+        last_seen REAL NOT NULL
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news_articles(published);")
+
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_events(timestamp);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_category_timestamp ON activity_events(category, timestamp);")
