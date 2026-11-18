@@ -99,7 +99,7 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
     };
 
     fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 15000);
+    const interval = setInterval(fetchTelemetry, 5000);
     return () => clearInterval(interval);
   }, []);
 

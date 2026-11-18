@@ -460,6 +460,43 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
             payload.timestamp_offset,
             payload.url or ""
         ))
+    elif payload.window_title:
+        title_raw = payload.window_title
+        title_lower = title_raw.lower()
+        import re
+        chap_match = re.search(r'chapter\s*(\d+(?:\.\d+)?)', title_lower, re.IGNORECASE)
+        ep_match = re.search(r'(?:episode|ep\.?)\s*(\d+)', title_lower, re.IGNORECASE)
+        
+        domain_str = (payload.domain or "").lower()
+        is_manhwa = any(k in title_lower or k in domain_str for k in ["manhwa", "manga", "comic", "asura", "flame", "toon", "reaper", "webtoon", "scan"])
+        is_anime = any(k in title_lower or k in domain_str for k in ["crunchyroll", "anime", "netflix", "aniwatch"])
+
+        if chap_match and is_manhwa:
+            chap_num = chap_match.group(1)
+            parts = re.split(r'[-–|]', title_raw)
+            series_name = parts[0].strip()
+            if series_name:
+                cursor.execute("""
+                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
+                VALUES ('MANHWA', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(title) DO UPDATE SET
+                    current_unit = excluded.current_unit,
+                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
+                    last_updated = CURRENT_TIMESTAMP;
+                """, (series_name, f"Chapter {chap_num}", payload.url or ""))
+        elif ep_match and is_anime:
+            ep_num = ep_match.group(1)
+            parts = re.split(r'[-–|]', title_raw)
+            series_name = parts[0].strip()
+            if series_name:
+                cursor.execute("""
+                INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
+                VALUES ('SHOW', ?, ?, NULL, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(title) DO UPDATE SET
+                    current_unit = excluded.current_unit,
+                    resume_url = CASE WHEN excluded.resume_url != '' THEN excluded.resume_url ELSE media_bookmarks.resume_url END,
+                    last_updated = CURRENT_TIMESTAMP;
+                """, (series_name, f"Episode {ep_num}", payload.url or ""))
 
     conn.commit()
     conn.close()

@@ -8,10 +8,14 @@
   const pathname = window.location.pathname;
   const pageTitle = document.title || "";
 
-  // 1. MANHWA / MANGA DETECTION (Null-safe extraction)
+  // 1. MANHWA / MANGA / MANHUA DETECTION (Null-safe extraction)
   const isManhwaSite = [
-    "asura", "flamecomics", "mangadex", "webtoons", "reaper", "toongod"
-  ].some(site => hostname.includes(site));
+    "asura", "flamecomics", "mangadex", "webtoons", "reaper", "toongod",
+    "mangakakalot", "chapmanganato", "manganato", "void-scans", "cosmicscans",
+    "zeroscans", "bato.to", "manhuafast", "manhwatop"
+  ].some(site => hostname.includes(site)) || (
+    /chapter\s*\d+/i.test(pageTitle) && /(?:manhwa|manga|manhua|webtoon|comic|scan)/i.test(pageTitle + " " + hostname)
+  );
 
   if (isManhwaSite) {
     let seriesTitle = "";
