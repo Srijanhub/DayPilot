@@ -18,6 +18,9 @@ from pydantic import BaseModel, Field
 from database import get_db_connection, init_db
 from classifier import ContextClassifier
 from collectors.briefing_engine import synthesize_morning_briefing
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="DayPilot Engine", version="1.0.0")
 
