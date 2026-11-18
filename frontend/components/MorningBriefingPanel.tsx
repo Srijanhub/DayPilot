@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sparkles, Clock, ExternalLink, Calendar, CheckCircle } from "lucide-react";
+import { Sparkles, Clock, ExternalLink, Calendar, CheckCircle, RefreshCw } from "lucide-react";
 
 interface BriefingData {
   morning_quote: string;
@@ -16,12 +16,19 @@ export default function MorningBriefingPanel() {
   const [loading, setLoading] = useState(true);
   const [showLiveCalendar, setShowLiveCalendar] = useState(false);
 
-  useEffect(() => {
+  const fetchBriefing = () => {
+    setLoading(true);
     fetch("http://127.0.0.1:4000/api/briefing/morning")
       .then((res) => res.json())
       .then((data) => setBriefing(data))
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchBriefing();
+    const interval = setInterval(fetchBriefing, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -54,6 +61,13 @@ export default function MorningBriefingPanel() {
               <span>PORTAL</span>
               <ExternalLink className="w-2.5 h-2.5" />
             </a>
+            <button
+              onClick={fetchBriefing}
+              className="text-[var(--text-muted)] hover:text-white p-1"
+              title="Refresh mission plan"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            </button>
           </div>
         </div>
 
