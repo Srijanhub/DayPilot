@@ -14,6 +14,7 @@ interface BriefingData {
 export default function MorningBriefingPanel() {
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLiveCalendar, setShowLiveCalendar] = useState(false);
 
   useEffect(() => {
     fetch("http://127.0.0.1:4000/api/briefing/morning")
@@ -33,16 +34,54 @@ export default function MorningBriefingPanel() {
               09:00 AM IGNITION // MISSION PLAN
             </span>
           </div>
-          <a
-            href="https://calendar.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] font-mono text-[var(--text-muted)] hover:text-white flex items-center space-x-1 px-2 py-0.5 rounded border border-[var(--border-hairline)] hover:border-[var(--accent-primary)] transition"
-          >
-            <span>CALENDAR</span>
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowLiveCalendar(!showLiveCalendar)}
+              className={`text-[10px] font-mono px-2 py-0.5 rounded border transition flex items-center space-x-1 ${
+                showLiveCalendar
+                  ? "bg-[var(--accent-primary)] text-black font-bold border-[var(--accent-primary)]"
+                  : "text-[var(--text-muted)] hover:text-white border-[var(--border-hairline)]"
+              }`}
+            >
+              <span>{showLiveCalendar ? "HIDE CALENDAR" : "LIVE CALENDAR"}</span>
+            </button>
+            <a
+              href="https://calendar.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-mono text-[var(--text-muted)] hover:text-white flex items-center space-x-1 px-2 py-0.5 rounded border border-[var(--border-hairline)] hover:border-[var(--accent-primary)] transition"
+            >
+              <span>PORTAL</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </div>
         </div>
+
+        {/* Embedded Google Calendar View (Dark-HUD Filtered) */}
+        {showLiveCalendar && (
+          <div className="mb-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-elevated)] p-2 space-y-2 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+              <span>SYNCED: onlinesrijanhalder@gmail.com (Asia/Kolkata)</span>
+              <a
+                href="https://calendar.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white flex items-center space-x-1 text-[var(--accent-primary)]"
+              >
+                <span>OPEN FULLSCREEN</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+            <iframe
+              src="https://calendar.google.com/calendar/embed?src=onlinesrijanhalder%40gmail.com&ctz=Asia%2FKolkata"
+              className="w-full h-72 rounded-lg border border-[var(--border-hairline)]"
+              style={{
+                filter: "invert(0.88) hue-rotate(180deg) contrast(1.1) brightness(0.85)"
+              }}
+              loading="lazy"
+            />
+          </div>
+        )}
 
         {/* Priority Focus Directive */}
         <div className="p-3.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-4">
