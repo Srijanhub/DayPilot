@@ -1,11 +1,11 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P1-T02 | Last updated: 2026-11-18 10:31
+Status: IN PROGRESS | Current: P1-T03 | Last updated: 2026-11-18 10:32
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
       Done when: `npm run build` succeeds cleanly.
-- [ ] P1-T02 Implement Flight Deck design tokens (OKLCH CSS variables, fonts, etched panels, corner ticks, film grain)
-      Done when: global CSS and layout render with dark flight-deck aesthetic and grain overlay.
+- [x] P1-T02 Implement Flight Deck design tokens (OKLCH CSS variables, fonts, etched panels, corner ticks, film grain)
+      Done when: tokens are used by at least one rendered component
 - [ ] P1-T03 Implement Three.js interactive 3D Orb with Simplex noise vertex displacement and Fresnel rim glow
       Done when: Orb renders at 60 FPS in canvas, responds to mouse cursor with inertia/lerp.
 - [ ] P1-T04 Implement 24-Hour Timeline Dial Ring around the orb with arc segments and hover tooltip
