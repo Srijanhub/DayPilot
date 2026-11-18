@@ -9,6 +9,7 @@ import sys
 import json
 import urllib.request
 import urllib.parse
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from mcp.server.mcpserver import MCPServer
@@ -20,7 +21,19 @@ server = MCPServer(
 )
 
 DAYPILOT_BACKEND_URL = os.environ.get("DAYPILOT_BACKEND_URL", "http://127.0.0.1:4000")
-DAYPILOT_API_TOKEN = os.environ.get("DAYPILOT_API_TOKEN", "daypilot_local_sec_994b7a2d")
+
+
+def _get_active_token() -> str:
+    env_token = os.environ.get("DAYPILOT_API_TOKEN", "").strip()
+    if env_token and env_token != "daypilot_local_sec_994b7a2d":
+        return env_token
+    token_file = Path.home() / "daypilot" / "token"
+    if token_file.exists():
+        return token_file.read_text().strip()
+    return ""
+
+
+DAYPILOT_API_TOKEN = _get_active_token()
 
 
 def _get_api(path: str) -> Dict[str, Any]:

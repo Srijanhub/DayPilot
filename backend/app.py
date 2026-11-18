@@ -14,24 +14,32 @@ from contextlib import asynccontextmanager
 import asyncio
 import httpx
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Header, Depends
+from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from database import get_db_connection, init_db, get_today_range, upsert_bookmark, prune_media_bookmarks
+from database import get_db_connection, init_db, get_today_range, upsert_bookmark
 from media_parser import parse_media_info
 from classifier import ContextClassifier
 from collectors.briefing_engine import synthesize_morning_briefing
-from collectors.bosscoder import get_bosscoder_alerts
-from collectors.github_sync import get_github_notifications
-from collectors.google_suite import get_priority_emails
 from dotenv import load_dotenv
 
+from auth import DAYPILOT_API_TOKEN, verify_daypilot_token, DEFAULT_DISALLOWED_TOKEN
+
 load_dotenv()
+
+DEFAULT_BROWSER = os.environ.get("DAYPILOT_BROWSER", "Opera GX")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Enforce rejection of default weak token on startup
+    if DAYPILOT_API_TOKEN == DEFAULT_DISALLOWED_TOKEN or os.environ.get("DAYPILOT_API_TOKEN") == DEFAULT_DISALLOWED_TOKEN:
+        raise RuntimeError(
+            f"Startup rejected: Insecure default token '{DEFAULT_DISALLOWED_TOKEN}' is in use. "
+            "Please remove it from .env to auto-generate a secure random token in ~/daypilot/token."
+        )
+
     # Modern lifespan handler (replaces deprecated @app.on_event("startup"))
     init_db()
     from unified_syncer import sync_engine
@@ -47,6 +55,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DayPilot Engine", version="1.0.0", lifespan=lifespan)
 
+# Router with router-level dependency protecting all state-changing endpoints
+authenticated_router = APIRouter(dependencies=[Depends(verify_daypilot_token)])
+
 # Strict CORS: Allow only localhost:3000 and browser extension origins
 app.add_middleware(
     CORSMiddleware,
@@ -59,13 +70,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-DAYPILOT_API_TOKEN = os.environ.get("DAYPILOT_API_TOKEN", "daypilot_local_sec_994b7a2d")
-
-
-def verify_daypilot_token(x_daypilot_token: Optional[str] = Header(None, alias="X-DayPilot-Token")):
-    if not x_daypilot_token or x_daypilot_token != DAYPILOT_API_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing X-DayPilot-Token")
 
 # Active Context Classifier instance
 classifier = ContextClassifier()
@@ -181,7 +185,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[ChatMessage]] = []
 
 
-@app.post("/api/chat")
+@authenticated_router.post("/api/chat")
 async def handle_copilot_chat(req: ChatRequest):
     """
     DayPilot AI Copilot chat handler with automatic real-time context injection.
@@ -195,13 +199,13 @@ async def handle_copilot_chat(req: ChatRequest):
     user_name = os.environ.get("USER_NAME", "Developer")
     gh_user = os.environ.get("GITHUB_USERNAME", "Developer")
 
-    # 1. Gather live DayPilot contexts (non-blocking from sync engine cache)
+    # 1. Gather live DayPilot contexts (pure in-memory non-blocking reads from sync engine cache)
     from unified_syncer import sync_engine
     current_mode = classifier.committed_mode
     active_tab = query_live_tab()
-    bosscoder_data = sync_engine.bosscoder_data or get_bosscoder_alerts()
-    github_data = sync_engine.github_data or get_github_notifications()
-    emails_data = sync_engine.email_data or get_priority_emails()
+    bosscoder_data = sync_engine.bosscoder_data or []
+    github_data = sync_engine.github_data or []
+    emails_data = sync_engine.email_data or []
 
     # Format context blocks
     active_tab_str = f"{active_tab.get('window_title', 'Unknown')} ({active_tab.get('domain', 'desktop')}) [Dwell: {active_tab.get('dwell_seconds', 0)}s]"
@@ -216,7 +220,7 @@ You have real-time live access to the user's workspace telemetry, accounts, and 
 CURRENT USER TELEMETRY & CONTEXT:
 - Developer: {user_name} (@{gh_user})
 - Current Mental State Mode: [{current_mode}] (WORK / STUDY / RELAX)
-- Active Opera GX Tab: {active_tab_str}
+- Active {DEFAULT_BROWSER} Tab: {active_tab_str}
 - BossCoder Academy Progress:
 {bc_str}
 - Active GitHub Pull Requests:
@@ -265,8 +269,6 @@ YOUR INSTRUCTIONS:
         except Exception:
             # Fallback if Gemini request times out or key error
             pass
-            # Fallback if Gemini request times out or key error
-            pass
 
     # Intelligent Local Copilot Engine (Zero-API Key Fallback)
     import re
@@ -284,11 +286,11 @@ YOUR INSTRUCTIONS:
             reply = "Here is your live BossCoder status:\n" + "\n".join(bc_lines) + "\n\nWould you like to review homework, walk through edge cases, or discuss the next topic?"
         else:
             reply = "Your BossCoder curriculum is currently up to date with no pending lecture alerts."
-    elif "mail" in lower or "gmail" in lower or "email" in lower:
+    elif words.intersection({"mail", "gmail", "email", "emails", "inbox"}):
         reply = f"Here are your latest executive email summaries:\n" + "\n".join([f"• **{e.get('from')}**: {e.get('summary', e.get('subject'))}" for e in emails_data[:3]])
-    elif "tab" in lower or "focus" in lower or "doing" in lower:
+    elif words.intersection({"tab", "tabs", "focus", "doing"}):
         reply = f"You are currently focused on **{active_tab.get('window_title')}** ({active_tab.get('domain')}) in mode **[{current_mode}]**. You've been on this tab for {active_tab.get('dwell_seconds')} seconds."
-    elif "help" in lower or "hi" in lower or "hello" in lower:
+    elif words & {"hi", "hello", "help"}:
         pr_count = len(github_data)
         bc_count = len(bosscoder_data)
         reply = f"Greetings {user_name}. DayPilot Copilot is online and connected to your cockpit. Mode: **[{current_mode}]**.\n\nI have full live context of:\n1. Your {pr_count} active GitHub PR(s)\n2. Your BossCoder curriculum progress ({bc_count} active module(s))\n3. Your active browser tabs & executive email digests\n\nWhat would you like to tackle right now?"
@@ -446,7 +448,7 @@ def get_morning_briefing():
     return sync_engine.get_cached_briefing()
 
 
-@app.post("/api/sync/all")
+@authenticated_router.post("/api/sync/all")
 async def sync_all_connected_services():
     from unified_syncer import sync_engine
     report = await sync_engine.sync_all_now()
@@ -543,7 +545,7 @@ def get_context():
     }
 
 
-@app.post("/api/context/override")
+@authenticated_router.post("/api/context/override")
 async def set_override(payload: OverridePayload):
     new_mode = classifier.set_manual_override(payload.mode)
     await broadcast_state("MODE_CHANGE", {
@@ -554,7 +556,7 @@ async def set_override(payload: OverridePayload):
     return {"status": "ok", "mode": new_mode, "override": payload.mode}
 
 
-@app.post("/api/heartbeat")
+@authenticated_router.post("/api/heartbeat")
 async def ingest_heartbeat(payload: HeartbeatPayload):
     # Process through context classifier
     current_mode, mode_changed = classifier.process_heartbeat(
@@ -657,7 +659,7 @@ def get_memos():
     return memos
 
 
-@app.post("/api/memos/upload")
+@authenticated_router.post("/api/memos/upload")
 async def upload_memo(
     file: Optional[UploadFile] = File(None),
     duration: float = Form(0.0),
@@ -711,7 +713,7 @@ def get_music_suggestion():
     return get_preferred_cluster_for_activity(mode)
 
 
-@app.post("/api/bookmarks/sync-history")
+@authenticated_router.post("/api/bookmarks/sync-history")
 async def trigger_history_sync():
     from history_syncer import sync_opera_gx_history
     count = sync_opera_gx_history()
@@ -719,19 +721,23 @@ async def trigger_history_sync():
     return {"status": "ok", "synced_count": count}
 
 
-@app.post("/api/open-url", dependencies=[Depends(verify_daypilot_token)])
+@authenticated_router.post("/api/open-url")
 def open_system_url(payload: Dict[str, Any]):
     url = payload.get("url", "")
     if url and (url.startswith("http://") or url.startswith("https://")):
         import subprocess
         try:
-            # Default browser for DayPilot is explicitly Opera GX
-            res = subprocess.run(["open", "-a", "Opera GX", url], capture_output=True)
+            # Configurable browser setting (default: Opera GX)
+            res = subprocess.run(["open", "-a", DEFAULT_BROWSER, url], capture_output=True)
             if res.returncode == 0:
-                return {"status": "ok", "url": url, "browser": "Opera GX"}
+                return {"status": "ok", "url": url, "browser": DEFAULT_BROWSER}
             # Fallback to system open
             subprocess.Popen(["open", url])
             return {"status": "ok", "url": url, "browser": "default"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
     return {"status": "invalid_url"}
+
+
+# Register authenticated router protecting all state-changing endpoints
+app.include_router(authenticated_router)

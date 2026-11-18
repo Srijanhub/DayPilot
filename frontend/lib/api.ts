@@ -10,15 +10,34 @@ export const API_BASE =
 export const WS_BASE =
   process.env.NEXT_PUBLIC_DAYPILOT_WS_URL || "ws://127.0.0.1:4000";
 
-export const API_TOKEN =
-  process.env.NEXT_PUBLIC_DAYPILOT_API_TOKEN || "daypilot_local_sec_994b7a2d";
+let cachedToken: string | null = process.env.NEXT_PUBLIC_DAYPILOT_API_TOKEN || null;
+
+export async function getActiveToken(): Promise<string> {
+  if (cachedToken) return cachedToken;
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/token");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          cachedToken = data.token;
+          return cachedToken as string;
+        }
+      }
+    } catch (e) {}
+  }
+  return "";
+}
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
   const headers = new Headers(options.headers || {});
 
   if (!headers.has("X-DayPilot-Token")) {
-    headers.set("X-DayPilot-Token", API_TOKEN);
+    const token = await getActiveToken();
+    if (token) {
+      headers.set("X-DayPilot-Token", token);
+    }
   }
 
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
