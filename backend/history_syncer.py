@@ -5,6 +5,7 @@ consumption (shows, anime, manhwa, YouTube series) and updates media_bookmarks.
 """
 
 import os
+import time
 import shutil
 import sqlite3
 import re
@@ -28,15 +29,16 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
     if not OPERA_GX_HISTORY_PATH.exists():
         return 0
 
+    temp_file = Path(f"/tmp/daypilot_opera_bkm_{os.getpid()}_{time.time_ns()}.db")
     try:
         # Create a safe read copy to avoid lock collisions with running Opera GX
-        shutil.copy2(OPERA_GX_HISTORY_PATH, TEMP_HISTORY_COPY)
+        shutil.copy2(OPERA_GX_HISTORY_PATH, temp_file)
     except Exception as e:
         print(f"[HistorySyncer] Failed to copy Opera GX history: {e}")
         return 0
 
     try:
-        conn = sqlite3.connect(str(TEMP_HISTORY_COPY))
+        conn = sqlite3.connect(str(temp_file))
         cursor = conn.cursor()
 
         query = """
@@ -72,6 +74,11 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
     except Exception as e:
         print(f"[HistorySyncer] Error querying Opera GX history database: {e}")
         return 0
+    finally:
+        try:
+            temp_file.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     # Parse and deduplicate by distinct series
     bookmarks: Dict[str, Dict[str, Any]] = {}
@@ -239,15 +246,16 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
     if not OPERA_GX_HISTORY_PATH.exists():
         return 0
 
+    temp_file = Path(f"/tmp/daypilot_opera_act_{os.getpid()}_{time.time_ns()}.db")
     try:
-        shutil.copy2(OPERA_GX_HISTORY_PATH, TEMP_HISTORY_COPY)
+        shutil.copy2(OPERA_GX_HISTORY_PATH, temp_file)
     except Exception as e:
         print(f"[HistorySyncer] Failed to copy Opera GX history for activity: {e}")
         return 0
 
     inserted_count = 0
     try:
-        h_conn = sqlite3.connect(str(TEMP_HISTORY_COPY))
+        h_conn = sqlite3.connect(str(temp_file))
         h_cur = h_conn.cursor()
 
         since_dt = (datetime.now() - timedelta(hours=limit_hours)).strftime("%Y-%m-%d %H:%M:%S")
@@ -281,14 +289,23 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
                 if not url or url.startswith(("chrome://", "opera://", "about:", "chrome-extension://")):
                     continue
 
-                dur_sec = max(5, int((visit_dur_raw or 0) / 1000000))
-                # Skip trivial 5s redirects unless title or URL indicates a meeting, call, or substantial session
-                if dur_sec <= 5 and not any(k in (title or "").lower() or k in url.lower() for k in ["meeting", "zoom", "lecture", "video", "call", "google meet", "teams"]):
-                    continue
-
                 parsed = urllib.parse.urlparse(url)
                 domain = parsed.netloc
                 raw_title = (title or domain or "Opera GX").strip()
+
+                is_meeting_or_media = any(
+                    k in url.lower() or k in raw_title.lower()
+                    for k in ["zoom.us", "meet.google", "teams.microsoft", "youtube.com/watch", "netflix.com", "crunchyroll.com", "meeting", "call"]
+                )
+                if is_meeting_or_media:
+                    dur_sec = min(3600, max(5, int((visit_dur_raw or 0) / 1000000)))
+                else:
+                    # Standard webpage browsing: cap background tab lifetime at 180s (3 minutes active dwell)
+                    dur_sec = min(180, max(5, int((visit_dur_raw or 0) / 1000000)))
+
+                # Skip trivial 5s redirects unless title or URL indicates a meeting, call, or substantial session
+                if dur_sec <= 5 and not any(k in (title or "").lower() or k in url.lower() for k in ["meeting", "zoom", "lecture", "video", "call", "google meet", "teams"]):
+                    continue
 
                 # Deduplicate: check if an event already exists within +/- 15 seconds with matching url or title
                 db_cur.execute("""
@@ -318,6 +335,11 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
 
     except Exception as e:
         print(f"[HistorySyncer] Error syncing Opera GX activity: {e}")
+    finally:
+        try:
+            temp_file.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     return inserted_count
 
