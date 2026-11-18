@@ -23,10 +23,12 @@ const CATEGORY_COLORS = {
 };
 
 export default function DialRing({ segments = [] }: DialRingProps) {
+  const [mounted, setMounted] = useState(false);
   const [currentTimeHour, setCurrentTimeHour] = useState<number>(9);
   const [hoveredSegment, setHoveredSegment] = useState<TimelineSegment | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     const updateTime = () => {
       const now = new Date();
       setCurrentTimeHour(now.getHours() + now.getMinutes() / 60);
@@ -42,14 +44,14 @@ export default function DialRing({ segments = [] }: DialRingProps) {
   const strokeWidth = 8;
 
   // Converts decimal hour (0-24) to angle in degrees (-90deg is 12 o'clock / 00:00)
-  const hourToAngle = (h: number) => (h / 24) * 360 - 90;
+  const hourToAngle = (h: number) => Math.round(((h / 24) * 360 - 90) * 100) / 100;
 
-  // Polar to Cartesian
+  // Polar to Cartesian with 2-decimal precision clamping to eliminate SSR/V8 float diffs
   const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
     const rad = (angleDeg * Math.PI) / 180.0;
     return {
-      x: cx + r * Math.cos(rad),
-      y: cy + r * Math.sin(rad)
+      x: Math.round((cx + r * Math.cos(rad)) * 100) / 100,
+      y: Math.round((cy + r * Math.sin(rad)) * 100) / 100
     };
   };
 
@@ -71,6 +73,12 @@ export default function DialRing({ segments = [] }: DialRingProps) {
   const currentAngle = hourToAngle(currentTimeHour);
   const pointerPos = polarToCartesian(center, center, radius, currentAngle);
 
+  if (!mounted) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10" />
+    );
+  }
+
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <svg
@@ -78,6 +86,7 @@ export default function DialRing({ segments = [] }: DialRingProps) {
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         className="overflow-visible"
+        suppressHydrationWarning
       >
         <defs>
           <filter id="ringGlow" x="-20%" y="-20%" width="140%" height="140%">
