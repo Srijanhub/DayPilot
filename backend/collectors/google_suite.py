@@ -9,6 +9,7 @@ import imaplib
 import email
 from email.header import decode_header
 import urllib.request
+import urllib.parse
 from datetime import datetime, date
 from typing import List, Dict, Any
 
