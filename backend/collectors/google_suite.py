@@ -17,24 +17,27 @@ import html
 
 
 def clean_email_body(raw_text: str) -> str:
-    """Strips all HTML markup, DOCTYPE, head, style, script, comments, and entities."""
+    """Strips all HTML markup, DOCTYPE, head, style, script, comments, entities, and invisible tracking characters."""
     if not raw_text:
         return ""
 
-    # 1. Strip comments including conditional Outlook comments (<!--[if ...]> and malformed <!->)
-    text = re.sub(r'<!--[\s\S]*?-->', ' ', raw_text)
-    text = re.sub(r'<!\[[\s\S]*?\]>', ' ', text)
+    # 1. Strip comments including conditional Outlook comments (<!--[if ...]> and malformed <!->, em-dashes)
+    text = re.sub(r'<!--[\s\S]*?(-->|$)', ' ', raw_text)
+    text = re.sub(r'<!\[[\s\S]*?(\]>|$)', ' ', text)
     text = re.sub(r'<!DOCTYPE[\s\S]*?>', ' ', text, flags=re.IGNORECASE)
     text = re.sub(r'<!-{1,2}>', ' ', text)
+    text = re.sub(r'<![\u2014\u2013-]*>', ' ', text)
     text = re.sub(r'<![^>]*>', ' ', text)
 
-    # 2. Strip <style>, <script>, and <head> blocks with their contents
-    text = re.sub(r'<style[\s\S]*?</style>', ' ', text, flags=re.IGNORECASE)
-    text = re.sub(r'<script[\s\S]*?</script>', ' ', text, flags=re.IGNORECASE)
-    text = re.sub(r'<head[\s\S]*?</head>', ' ', text, flags=re.IGNORECASE)
+    # 2. Strip <style>, <script>, <head>, <title> blocks with their contents (even if unclosed or multiline)
+    text = re.sub(r'<style[\s\S]*?(</style>|$)', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<script[\s\S]*?(</script>|$)', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<head[\s\S]*?(</head>|$)', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<title[\s\S]*?(</title>|$)', ' ', text, flags=re.IGNORECASE)
 
-    # 3. Strip all remaining HTML tags
+    # 3. Strip all remaining HTML tags and dangling opening brackets
     text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'<[^>]*$', ' ', text)
 
     # 4. Unescape HTML entities (&nbsp;, &amp;, &#39;, etc.)
     text = html.unescape(text)
@@ -43,15 +46,18 @@ def clean_email_body(raw_text: str) -> str:
     text = re.sub(r'\[image:[^\]]*\]', '', text)
     text = re.sub(r'https?://\S+', '', text)
 
-    # 6. Remove standard email marketing boilerplate footers
+    # 6. Remove zero-width characters, invisible preheader spacers, and soft hyphens
+    text = re.sub(r'[\ufeff\u034f\u200b\u200c\u200d\u2060\u00a0\xad]+', ' ', text)
+
+    # 7. Remove corporate address and legal boilerplate footers
     text = re.sub(
-        r'(View in browser|Unsubscribe|Terms and conditions|Privacy Policy|Manage preferences|Preferences|You\'re receiving this email because).*$',
+        r'(View in browser|Unsubscribe|Terms and conditions|Privacy Policy|Manage preferences|Preferences|You\'re receiving this email because|Thank you for choosing Zoom|Zoom Communications, Inc).*$',
         '',
         text,
         flags=re.IGNORECASE
     )
 
-    # 7. Normalize whitespace
+    # 8. Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -82,13 +88,18 @@ def extract_email_summary(subject: str, sender: str, body_text: str) -> str:
     meaningful = [
         s.strip() for s in sentences
         if len(s.strip()) > 15
-        and not s.lower().startswith(('hi ', 'hello', 'dear ', 'thanks', 'click here', '<!'))
+        and not s.lower().startswith(('hi ', 'hello', 'dear ', 'thanks', 'click here', '<!', '<'))
+        and not any(s.lower().startswith(p) for p in ['view in', 'unsubscribe', 'terms'])
     ]
     if meaningful:
         summary = " ".join(meaningful[:2])
         return summary[:280] + ("..." if len(summary) > 280 else "")
 
-    return clean[:200] if clean else f"Email regarding: {subject}"
+    if clean and not clean.startswith(('<', '<!')) and any(c.isalnum() for c in clean):
+        clean_snip = clean[:200]
+        return clean_snip + ("..." if len(clean) > 200 else "")
+
+    return f"Email regarding: {subject}"
 
 
 def get_calendar_events() -> List[Dict[str, Any]]:

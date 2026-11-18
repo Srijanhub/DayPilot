@@ -6,17 +6,24 @@ import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 
 function cleanSummaryText(text: string): string {
   if (!text) return "No preview available.";
-  return text
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<!\[[\s\S]*?\]>/g, " ")
-    .replace(/<!DOCTYPE[\s\S]*?>/gi, " ")
-    .replace(/<!-{1,2}>/g, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<head[\s\S]*?<\/head>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim() || "No preview available.";
+  return (
+    text
+      .replace(/<!--[\s\S]*?(-->|$)/g, " ")
+      .replace(/<!\[[\s\S]*?(\]>|$)/g, " ")
+      .replace(/<!DOCTYPE[\s\S]*?>/gi, " ")
+      .replace(/<!-{1,2}>/g, " ")
+      .replace(/<![\u2014\u2013-]*>/g, " ")
+      .replace(/<![^>]*>/g, " ")
+      .replace(/<style[\s\S]*?(<\/style>|$)/gi, " ")
+      .replace(/<script[\s\S]*?(<\/script>|$)/gi, " ")
+      .replace(/<head[\s\S]*?(<\/head>|$)/gi, " ")
+      .replace(/<title[\s\S]*?(<\/title>|$)/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/<[^>]*$/g, " ")
+      .replace(/[\ufeff\u034f\u200b\u200c\u200d\u2060\u00a0\xad]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "No preview available."
+  );
 }
 
 export default function GmailDigestPanel() {
