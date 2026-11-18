@@ -440,6 +440,12 @@ def get_tabs():
 
 @app.get("/api/timeline")
 def get_timeline():
+    from history_syncer import sync_opera_gx_activity
+    try:
+        sync_opera_gx_activity(limit_hours=24)
+    except Exception:
+        pass
+
     start_ts, end_ts = get_today_range()
     conn = get_db_connection()
     try:
@@ -573,6 +579,12 @@ def get_spectrogram():
 def get_nightly_briefing():
     from collectors.spectrogram import generate_24h_spectrogram, audit_planned_vs_completed
     from unified_syncer import sync_engine
+    from history_syncer import sync_opera_gx_activity
+
+    try:
+        sync_opera_gx_activity(limit_hours=24)
+    except Exception:
+        pass
 
     start_ts, end_ts = get_today_range()
     conn = get_db_connection()
@@ -674,8 +686,12 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
         idle_seconds=payload.idle_seconds
     )
 
-    # Ingest into SQLite database if non-idle
-    if payload.idle_seconds <= classifier.idle_timeout:
+    # Ingest into SQLite database if non-idle, or if in a meeting/video call
+    is_meeting = (
+        "zoom" in (payload.domain or "").lower() or "zoom" in (payload.window_title or "").lower() or
+        "meet.google.com" in (payload.domain or "").lower() or "teams" in (payload.domain or "").lower()
+    )
+    if is_meeting or payload.idle_seconds <= classifier.idle_timeout:
         conn = get_db_connection()
         try:
             cursor = conn.cursor()

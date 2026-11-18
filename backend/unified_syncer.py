@@ -12,7 +12,7 @@ import asyncio
 import time
 from typing import Dict, Any, Optional
 
-from history_syncer import sync_opera_gx_history
+from history_syncer import sync_opera_gx_history, sync_opera_gx_activity
 from collectors.bosscoder import get_bosscoder_alerts
 from collectors.github_sync import get_github_notifications
 from collectors.google_suite import get_priority_emails, get_calendar_events
@@ -147,6 +147,7 @@ class UnifiedSyncEngine:
         try:
             from database import prune_media_bookmarks
             count = sync_opera_gx_history()
+            act_count = sync_opera_gx_activity()
             prune_media_bookmarks(50)
             self._last_history_sync = time.time()
             self.synced_bookmarks_count = count

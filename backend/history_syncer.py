@@ -9,8 +9,9 @@ import shutil
 import sqlite3
 import re
 import asyncio
+import urllib.parse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 from database import get_db_connection
@@ -229,17 +230,110 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
     return updated_count
 
 
+def sync_opera_gx_activity(limit_hours: int = 48) -> int:
+    """
+    Safely reads Opera GX's visits database and imports genuine browsing activity
+    (meetings, lectures, development tools, documentation, study) into activity_events
+    if not already recorded by real-time heartbeats.
+    """
+    if not OPERA_GX_HISTORY_PATH.exists():
+        return 0
+
+    try:
+        shutil.copy2(OPERA_GX_HISTORY_PATH, TEMP_HISTORY_COPY)
+    except Exception as e:
+        print(f"[HistorySyncer] Failed to copy Opera GX history for activity: {e}")
+        return 0
+
+    inserted_count = 0
+    try:
+        h_conn = sqlite3.connect(str(TEMP_HISTORY_COPY))
+        h_cur = h_conn.cursor()
+
+        since_dt = (datetime.now() - timedelta(hours=limit_hours)).strftime("%Y-%m-%d %H:%M:%S")
+
+        query = """
+        SELECT 
+            datetime((v.visit_time/1000000)-11644473600, 'unixepoch', 'localtime') as visit_time,
+            u.title,
+            u.url,
+            v.visit_duration
+        FROM visits v
+        JOIN urls u ON v.url = u.id
+        WHERE datetime((v.visit_time/1000000)-11644473600, 'unixepoch', 'localtime') >= ?
+        ORDER BY v.visit_time ASC;
+        """
+        h_cur.execute(query, (since_dt,))
+        rows = h_cur.fetchall()
+        h_conn.close()
+
+        if not rows:
+            return 0
+
+        from classifier import ContextClassifier
+        temp_classifier = ContextClassifier()
+
+        db_conn = get_db_connection()
+        db_cur = db_conn.cursor()
+
+        try:
+            for vt, title, url, visit_dur_raw in rows:
+                if not url or url.startswith(("chrome://", "opera://", "about:", "chrome-extension://")):
+                    continue
+
+                dur_sec = max(5, int((visit_dur_raw or 0) / 1000000))
+                # Skip trivial 5s redirects unless title or URL indicates a meeting, call, or substantial session
+                if dur_sec <= 5 and not any(k in (title or "").lower() or k in url.lower() for k in ["meeting", "zoom", "lecture", "video", "call", "google meet", "teams"]):
+                    continue
+
+                parsed = urllib.parse.urlparse(url)
+                domain = parsed.netloc
+                raw_title = (title or domain or "Opera GX").strip()
+
+                # Deduplicate: check if an event already exists within +/- 15 seconds with matching url or title
+                db_cur.execute("""
+                    SELECT id FROM activity_events
+                    WHERE (timestamp = ? AND (url = ? OR window_title = ?))
+                       OR (timestamp BETWEEN datetime(?, '-15 seconds') AND datetime(?, '+15 seconds') AND (url = ? OR window_title = ?))
+                    LIMIT 1;
+                """, (vt, url, raw_title, vt, vt, url, raw_title))
+                if db_cur.fetchone():
+                    continue
+
+                category = temp_classifier.classify_target(
+                    app_name="Opera GX",
+                    domain=domain,
+                    title=raw_title
+                )
+
+                db_cur.execute("""
+                    INSERT INTO activity_events (timestamp, app_name, window_title, domain, url, category, duration_seconds)
+                    VALUES (?, 'Opera GX', ?, ?, ?, ?, ?);
+                """, (vt, raw_title, domain, url, category, dur_sec))
+                inserted_count += 1
+
+            db_conn.commit()
+        finally:
+            db_conn.close()
+
+    except Exception as e:
+        print(f"[HistorySyncer] Error syncing Opera GX activity: {e}")
+
+    return inserted_count
+
+
 async def run_periodic_history_sync(interval_seconds: int = 1800):
     """
     Background worker that runs immediately on startup and repeats every 30 minutes
-    (or at midnight for daily reconciliation) to keep media_bookmarks 100% accurate.
+    (or at midnight for daily reconciliation) to keep media_bookmarks and activity_events 100% accurate.
     """
     # Initial delay to let server finish startup
     await asyncio.sleep(2)
     while True:
         try:
-            count = sync_opera_gx_history()
-            print(f"[HistorySyncer] Synced {count} bookmarks from Opera GX history.")
+            b_count = sync_opera_gx_history()
+            a_count = sync_opera_gx_activity()
+            print(f"[HistorySyncer] Synced {b_count} bookmarks and {a_count} browser activity events from Opera GX.")
         except Exception as e:
             print(f"[HistorySyncer] Periodic sync error: {e}")
         # Sleep for 30 minutes (1800s)

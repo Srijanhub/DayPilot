@@ -26,11 +26,13 @@ class ContextClassifier:
         # Classification rule tables (can be loaded or configured)
         self.work_apps = {
             "com.microsoft.vscode", "vscode", "terminal", "iterm2", "cursor",
-            "com.apple.terminal", "com.googlecode.iterm2", "xcode", "sublime_text"
+            "com.apple.terminal", "com.googlecode.iterm2", "xcode", "sublime_text",
+            "zoom.us", "us.zoom.xos", "zoom", "slack", "microsoft teams", "webex"
         }
         self.work_domains = {
             "github.com", "gitlab.com", "stackoverflow.com", "leetcode.com",
-            "developer.mozilla.org", "localhost", "127.0.0.1", "npm.im", "pypi.org"
+            "developer.mozilla.org", "localhost", "127.0.0.1", "npm.im", "pypi.org",
+            "zoom.us", "app.zoom.us", "meet.google.com", "teams.microsoft.com", "slack.com"
         }
 
         self.study_domains = {
@@ -64,7 +66,9 @@ class ContextClassifier:
         if any(keyword in title_clean for keyword in ["chapter ", "ch.", "episode", "season ", "manhwa", "manga", "anime"]):
             return "RELAX"
 
-        # 3. Work checks (IDE, Terminal, GitHub)
+        # 3. Work checks (IDE, Terminal, GitHub, Zoom Meetings, Video Calls)
+        if any(keyword in title_clean for keyword in ["zoom meeting", "zoom", "google meet", "huddle", "call", "webinar", "standup"]):
+            return "WORK"
         for w_app in self.work_apps:
             if w_app in app_clean:
                 return "WORK"
@@ -82,6 +86,16 @@ class ContextClassifier:
         Process incoming heartbeat with hysteresis debounce.
         Requires continuous non-idle active dwell before transitioning modes.
         """
+        domain_clean = (domain or "").lower()
+        title_clean = (title or "").lower()
+        is_meeting = (
+            "zoom" in domain_clean or "zoom" in title_clean or
+            "meet.google.com" in domain_clean or "teams" in domain_clean
+        )
+        if is_meeting:
+            # Meetings/video calls are active listening time even if mouse is stationary
+            idle_seconds = 0
+
         now = time.time()
         heartbeat_gap = now - self.last_heartbeat_time
         self.last_heartbeat_time = now

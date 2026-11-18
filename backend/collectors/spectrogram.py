@@ -21,7 +21,7 @@ CATEGORY_COLORS = {
 
 
 def classify_activity_category(label: str, raw_cat: str) -> str:
-    """Refines raw category by detecting manhwa/manga and shows/anime titles."""
+    """Refines raw category by detecting manhwa/manga, shows/anime, and meetings."""
     lower = label.lower() if label else ""
     cat = (raw_cat or "WORK").upper()
 
@@ -29,6 +29,8 @@ def classify_activity_category(label: str, raw_cat: str) -> str:
         return "MANHWA"
     if any(k in lower for k in ["episode", "season", "netflix", "crunchyroll", "hianime", "anime", "youtube.com/watch"]):
         return "SHOWS"
+    if any(k in lower for k in ["zoom", "meeting", "google meet", "teams", "call", "huddle", "standup"]):
+        return "WORK"
     if cat in ("LEISURE", "RELAX"):
         return "RELAX"
     if cat in ("STUDY", "WORK"):
