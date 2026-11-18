@@ -259,6 +259,10 @@ YOUR INSTRUCTIONS:
         "active_tab": active_tab.get("window_title", ""),
         "source": "LOCAL_FLIGHTDECK_COPILOT"
     }
+
+
+@app.get("/api/tabs")
+def get_tabs():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
