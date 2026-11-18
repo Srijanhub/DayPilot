@@ -5,6 +5,7 @@
  */
 
 const API_ENDPOINT = "http://127.0.0.1:4000/api/heartbeat";
+const OPEN_TABS_ENDPOINT = "http://127.0.0.1:4000/api/tabs/open";
 const ALARM_NAME = "daypilot_flush_alarm";
 const FLUSH_INTERVAL_MINUTES = 0.1; // ~6 seconds
 
@@ -20,6 +21,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
+    reportOpenTabs();
     collectAndFlush();
   }
 });
@@ -95,11 +97,11 @@ async function collectAndFlush() {
   });
 }
 
-async function sendToBackend(payload) {
+async function sendToBackend(payload, endpoint = API_ENDPOINT) {
   const storage = await chrome.storage.local.get(["daypilot_api_token"]);
   const token = storage.daypilot_api_token || "";
 
-  fetch(API_ENDPOINT, {
+  fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -110,3 +112,59 @@ async function sendToBackend(payload) {
     // Backend offline, fail silently
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Live snapshot of the tabs that are open RIGHT NOW (not history).
+// Re-sent on every tab/window change and on each alarm tick; the backend drops
+// the snapshot automatically if the browser closes or reporting stops.
+// ---------------------------------------------------------------------------
+let openTabsTimer = null;
+function scheduleOpenTabsReport() {
+  clearTimeout(openTabsTimer);
+  openTabsTimer = setTimeout(reportOpenTabs, 400);
+}
+
+async function reportOpenTabs() {
+  const storage = await chrome.storage.local.get(["tracking_paused", "excluded_domains"]);
+  const excluded = storage.excluded_domains || [];
+  let tabs = [];
+
+  if (!storage.tracking_paused) {
+    const [all, win] = await Promise.all([
+      chrome.tabs.query({}),
+      chrome.windows.getLastFocused().catch(() => null)
+    ]);
+    const windowFocused = Boolean(win && win.focused);
+
+    tabs = all
+      .filter((t) => t.url && !t.incognito && /^https?:/i.test(t.url))
+      .filter((t) => {
+        try { return !excluded.some((d) => new URL(t.url).hostname.includes(d)); }
+        catch (e) { return false; }
+      })
+      .map((t) => ({
+        id: t.id,
+        window_id: t.windowId,
+        title: t.title || "",
+        url: t.url,
+        active: Boolean(t.active),
+        focused: Boolean(t.active && windowFocused && win && t.windowId === win.id)
+      }));
+  }
+
+  sendToBackend({ tabs }, OPEN_TABS_ENDPOINT);
+}
+
+chrome.tabs.onCreated.addListener(scheduleOpenTabsReport);
+chrome.tabs.onRemoved.addListener(scheduleOpenTabsReport);
+chrome.tabs.onActivated.addListener(scheduleOpenTabsReport);
+chrome.tabs.onReplaced.addListener(scheduleOpenTabsReport);
+chrome.tabs.onAttached.addListener(scheduleOpenTabsReport);
+chrome.tabs.onDetached.addListener(scheduleOpenTabsReport);
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "complete" || changeInfo.title || changeInfo.url) scheduleOpenTabsReport();
+});
+chrome.windows.onFocusChanged.addListener(scheduleOpenTabsReport);
+chrome.windows.onRemoved.addListener(scheduleOpenTabsReport);
+scheduleOpenTabsReport();

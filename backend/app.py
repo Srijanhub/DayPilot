@@ -45,7 +45,9 @@ async def lifespan(app: FastAPI):
     from unified_syncer import sync_engine
     sync_engine.set_broadcast_callback(broadcast_state)
     sync_task = asyncio.create_task(sync_engine.start_background_loop())
+    expiry_task = asyncio.create_task(_expire_open_tabs_loop())
     yield
+    expiry_task.cancel()
     sync_task.cancel()
     try:
         await sync_task
@@ -144,6 +146,15 @@ def query_live_tab() -> Dict[str, Any]:
         if not row:
             return {"is_active": False}
 
+        # A heartbeat older than 30s means nothing is actively focused right now
+        cursor.execute(
+            "SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER);",
+            (row["timestamp"],),
+        )
+        age = cursor.fetchone()[0]
+        if age is None or age > 30:
+            return {"is_active": False}
+
         # Count consecutive heartbeats on same title/domain
         cursor.execute("""
         SELECT SUM(duration_seconds) as current_dwell
@@ -174,6 +185,78 @@ def query_live_tab() -> Dict[str, Any]:
 @app.get("/api/tabs/live")
 async def get_live_tab():
     return query_live_tab()
+
+# ---------------------------------------------------------------------------
+# Currently open browser tabs: a live snapshot pushed by the extension.
+# Nothing is read from history; a stale snapshot (browser closed, extension
+# paused/disconnected) expires on its own, so closed tabs never linger.
+# ---------------------------------------------------------------------------
+OPEN_TABS_TTL_SECONDS = 20
+_open_tabs: Dict[str, Any] = {"tabs": [], "updated_at": 0.0}
+
+
+class OpenTab(BaseModel):
+    id: int
+    window_id: Optional[int] = None
+    title: str = ""
+    url: str
+    active: bool = False    # active tab within its window
+    focused: bool = False   # active tab of the window you are using right now
+
+
+class OpenTabsPayload(BaseModel):
+    tabs: List[OpenTab] = Field(default_factory=list)
+
+
+def _open_tabs_view() -> Dict[str, Any]:
+    fresh = _open_tabs["updated_at"] > 0 and (time.time() - _open_tabs["updated_at"]) <= OPEN_TABS_TTL_SECONDS
+    return {
+        "connected": fresh,
+        "tabs": _open_tabs["tabs"] if fresh else [],
+        "updated_at": _open_tabs["updated_at"],
+    }
+
+
+@authenticated_router.post("/api/tabs/open")
+async def report_open_tabs(payload: OpenTabsPayload):
+    from urllib.parse import urlparse
+    tabs = []
+    for t in payload.tabs:
+        if not t.url.startswith(("http://", "https://")):
+            continue
+        host = urlparse(t.url).hostname or ""
+        tabs.append({
+            "id": t.id,
+            "window_id": t.window_id,
+            "title": t.title or host,
+            "url": t.url,
+            "domain": host,
+            "active": t.active,
+            "focused": t.focused,
+            "category": classifier.classify_target(DEFAULT_BROWSER, host, t.title),
+        })
+    signature = lambda items: [(x["id"], x["url"], x["title"], x["focused"]) for x in items]
+    was_fresh = _open_tabs_view()["connected"]
+    changed = (not was_fresh) or signature(tabs) != signature(_open_tabs["tabs"])
+    _open_tabs["tabs"] = tabs
+    _open_tabs["updated_at"] = time.time()
+    if changed:
+        await broadcast_state("TABS_UPDATED", _open_tabs_view())
+    return {"status": "ok", "count": len(tabs)}
+
+
+@app.get("/api/tabs/open")
+async def get_open_tabs():
+    return _open_tabs_view()
+
+
+async def _expire_open_tabs_loop():
+    """Clears the snapshot and tells the UI once the extension stops reporting."""
+    while True:
+        await asyncio.sleep(5)
+        if _open_tabs["tabs"] and not _open_tabs_view()["connected"]:
+            _open_tabs["tabs"] = []
+            await broadcast_state("TABS_UPDATED", _open_tabs_view())
 
 
 class ChatMessage(BaseModel):

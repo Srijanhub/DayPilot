@@ -105,6 +105,21 @@ export interface LiveTabInfo {
   last_heartbeat?: string;
 }
 
+export interface OpenTab {
+  id: number;
+  window_id?: number | null;
+  title: string;
+  url: string;
+  domain: string;
+  active: boolean;
+  focused: boolean;
+  category: string;
+}
+export interface OpenTabsState {
+  connected: boolean;
+  tabs: OpenTab[];
+  updated_at?: number;
+}
 export interface TabHistoryItem {
   title: string;
   domain: string;
@@ -142,6 +157,7 @@ export const daypilotApi = {
   getBookmarks: () => apiFetch<MediaBookmark[]>("/api/bookmarks"),
   getMemos: () => apiFetch<VoiceMemo[]>("/api/memos"),
   getLiveTab: () => apiFetch<LiveTabInfo>("/api/tabs/live"),
+  getOpenTabs: () => apiFetch<OpenTabsState>("/api/tabs/open"),
   getTabHistory: () => apiFetch<TabHistoryItem[]>("/api/tabs/history"),
   getMusicSuggestion: () => apiFetch<any>("/api/music/suggest"),
   syncAll: () => apiFetch<any>("/api/sync/all", { method: "POST" }),

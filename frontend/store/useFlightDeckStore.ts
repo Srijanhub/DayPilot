@@ -6,7 +6,7 @@ import {
   MediaBookmark,
   VoiceMemo,
   LiveTabInfo,
-  TabHistoryItem,
+  OpenTab,
   NightlyBriefing
 } from "@/lib/api";
 
@@ -27,7 +27,8 @@ interface FlightDeckState {
   bookmarks: MediaBookmark[];
   memos: VoiceMemo[];
   liveTab: LiveTabInfo | null;
-  tabHistory: TabHistoryItem[];
+  openTabs: OpenTab[];
+  browserConnected: boolean;
   nightlyBriefing: NightlyBriefing | null;
   isBriefingLoading: boolean;
   isBookmarksLoading: boolean;
@@ -67,7 +68,8 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   bookmarks: [],
   memos: [],
   liveTab: null,
-  tabHistory: [],
+  openTabs: [],
+  browserConnected: false,
   nightlyBriefing: null,
   isBriefingLoading: false,
   isBookmarksLoading: false,
@@ -93,13 +95,13 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
 
   loadInitialData: async () => {
     try {
-      const [briefing, bookmarks, timeline, liveTab, tabHistory, memos, nightly] =
+      const [briefing, bookmarks, timeline, liveTab, openTabs, memos, nightly] =
         await Promise.allSettled([
           daypilotApi.getMorningBriefing(),
           daypilotApi.getBookmarks(),
           daypilotApi.getTimeline(),
           daypilotApi.getLiveTab(),
-          daypilotApi.getTabHistory(),
+          daypilotApi.getOpenTabs(),
           daypilotApi.getMemos(),
           daypilotApi.getNightlyBriefing()
         ]);
@@ -112,7 +114,8 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
             ? timeline.value
             : get().timelineSegments,
         liveTab: liveTab.status === "fulfilled" ? liveTab.value : null,
-        tabHistory: tabHistory.status === "fulfilled" ? tabHistory.value : [],
+        openTabs: openTabs.status === "fulfilled" ? openTabs.value.tabs : [],
+        browserConnected: openTabs.status === "fulfilled" ? openTabs.value.connected : false,
         memos: memos.status === "fulfilled" ? memos.value : [],
         nightlyBriefing: nightly.status === "fulfilled" ? nightly.value : null
       });
@@ -159,11 +162,11 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
 
   refreshLiveTab: async () => {
     try {
-      const [liveTab, tabHistory] = await Promise.all([
+      const [liveTab, open] = await Promise.all([
         daypilotApi.getLiveTab(),
-        daypilotApi.getTabHistory()
+        daypilotApi.getOpenTabs()
       ]);
-      set({ liveTab, tabHistory });
+      set({ liveTab, openTabs: open.tabs, browserConnected: open.connected });
     } catch (e) {}
   },
 
@@ -211,6 +214,8 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
       type === "EMAILS_UPDATED"
     ) {
       get().refreshBriefing();
+    } else if (type === "TABS_UPDATED") {
+      set({ openTabs: data?.tabs ?? [], browserConnected: Boolean(data?.connected) });
     } else if (type === "BOOKMARKS_UPDATED") {
       get().refreshBookmarks();
     }

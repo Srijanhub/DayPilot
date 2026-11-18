@@ -12,10 +12,17 @@ from datetime import datetime, timedelta
 from database import init_db, get_db_connection
 
 
-def seed_demo_data():
+def seed_demo_data(force: bool = False):
     init_db()
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    existing = cursor.execute("SELECT COUNT(*) FROM activity_events;").fetchone()[0]
+    if existing and not force:
+        conn.close()
+        print(f"Refusing to seed: {existing} real activity rows exist and seeding DELETES them. "
+              "Re-run with --force if you really want demo data.")
+        return
 
     # Clear existing demo data
     cursor.execute("DELETE FROM activity_events;")
@@ -98,5 +105,20 @@ def seed_demo_data():
     print("Realistic demo telemetry seeded successfully into SQLite.")
 
 
+def clear_demo_data():
+    """Remove everything the demo seeder (or real tracking) wrote, for a clean start."""
+    init_db()
+    conn = get_db_connection()
+    for table in ("activity_events", "media_bookmarks", "voice_memos", "music_preferences", "daily_audits"):
+        conn.execute(f"DELETE FROM {table};")
+    conn.commit()
+    conn.close()
+    print("Cleared activity, bookmarks, memos, music history and audits.")
+
+
 if __name__ == "__main__":
-    seed_demo_data()
+    import sys
+    if "--clear" in sys.argv:
+        clear_demo_data()
+    else:
+        seed_demo_data(force="--force" in sys.argv)
