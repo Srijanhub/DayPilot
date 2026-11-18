@@ -43,7 +43,7 @@ async function recordMediaEvent(tab, mediaPayload) {
   if (storage.excluded_domains.some(d => url.hostname.includes(d))) return;
 
   const heartbeat = {
-    app_name: "Google Chrome",
+    app_name: "Opera GX",
     window_title: tab.title || "",
     domain: url.hostname,
     url: tab.url,
@@ -79,7 +79,7 @@ async function collectAndFlush() {
         if (storage.excluded_domains.some(d => url.hostname.includes(d))) return;
 
         const heartbeat = {
-          app_name: "Google Chrome",
+          app_name: "Opera GX",
           window_title: activeTab.title || "",
           domain: url.hostname,
           url: activeTab.url,

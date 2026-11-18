@@ -67,12 +67,12 @@ npm run dev
 ```
 Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
-### D. Load the Chrome Extension (MV3)
-1. Open your browser (`chrome://extensions` or `opera://extensions`).
-2. Toggle on **Developer mode** in the top right.
+### D. Load the Opera GX Extension (MV3)
+1. Open Opera GX and navigate to `opera://extensions`.
+2. Toggle on **Developer mode** in the top right corner.
 3. Click **Load unpacked** and select:
    `/Users/srijanhalder/Desktop/Experiments/daypilot/browser-extension`
-4. The DayPilot HUD companion is now active!
+4. The DayPilot HUD companion is now active in Opera GX!
 
 ---
 

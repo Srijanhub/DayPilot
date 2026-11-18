@@ -15,6 +15,10 @@ fi
 # 2. Trigger morning compilation
 curl -s http://127.0.0.1:4000/api/briefing/morning > /dev/null
 
-# 3. Pop open dashboard
-open "http://localhost:3000"
+# 3. Pop open dashboard in Opera GX (or default browser)
+if [ -d "/Applications/Opera GX.app" ]; then
+    open -a "Opera GX" "http://localhost:3000"
+else
+    open "http://localhost:3000"
+fi
 echo "[$(date)] DayPilot Morning Ignition complete."
