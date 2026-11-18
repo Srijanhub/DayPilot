@@ -185,12 +185,15 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
     if not bookmarks:
         return 0
 
+    # Retain strictly the top 50 most recently accessed series from Opera GX
+    sorted_bookmarks = sorted(bookmarks.values(), key=lambda x: x["last_updated"], reverse=True)[:50]
+
     # Upsert into DayPilot database
     db = get_db_connection()
     c = db.cursor()
     updated_count = 0
 
-    for b in bookmarks.values():
+    for b in sorted_bookmarks:
         c.execute("""
         INSERT INTO media_bookmarks (media_type, title, current_unit, timestamp_offset, resume_url, last_updated)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -210,6 +213,16 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
             b["last_updated"]
         ))
         updated_count += 1
+
+    # Prune database to strictly retain only the top 50 most recent media bookmarks
+    c.execute("""
+    DELETE FROM media_bookmarks
+    WHERE id NOT IN (
+        SELECT id FROM media_bookmarks
+        ORDER BY last_updated DESC
+        LIMIT 50
+    );
+    """)
 
     db.commit()
     db.close()

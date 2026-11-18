@@ -559,6 +559,16 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
                     last_updated = CURRENT_TIMESTAMP;
                 """, (cleaned_title, unit_str, url_str))
 
+    # Ensure media_bookmarks never exceeds the top 50 items
+    cursor.execute("""
+    DELETE FROM media_bookmarks
+    WHERE id NOT IN (
+        SELECT id FROM media_bookmarks
+        ORDER BY last_updated DESC
+        LIMIT 50
+    );
+    """)
+
     conn.commit()
     conn.close()
 
@@ -576,7 +586,7 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
 def get_bookmarks():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC;")
+    cursor.execute("SELECT * FROM media_bookmarks ORDER BY last_updated DESC LIMIT 50;")
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
