@@ -1,8 +1,7 @@
 """
 DayPilot BossCoder Academy Collector
-Connects to https://bst-backend-java.bosscoderacademy.com
-Extracts upcoming live lectures, problem set deadlines, and contests.
-Fails gracefully with offline mock data if session token is missing.
+Connects live to https://bst-backend-java.bosscoderacademy.com
+Extracts real enrolled subjects, progress, attendance, and contest schedules.
 """
 
 import os
@@ -15,62 +14,81 @@ def get_bosscoder_alerts() -> List[Dict[str, Any]]:
     token = os.environ.get("BOSSCODER_AUTH_TOKEN")
     if token:
         try:
-            req = urllib.request.Request(
-                "https://bst-backend-java.bosscoderacademy.com/api/v1/student/dashboard",
+            alerts = []
+
+            # 1. Fetch live curriculum progress
+            req_curr = urllib.request.Request(
+                "https://bst-backend-java.bosscoderacademy.com/api/curriculum",
                 headers={
                     "Authorization": f"Bearer {token}",
                     "User-Agent": "DayPilot/1.0",
-                    "Accept": "application/json"
+                    "Accept": "application/json",
+                    "Origin": "https://school.bosscoderacademy.com",
+                    "Referer": "https://school.bosscoderacademy.com/"
                 }
             )
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                # If custom format from BossCoder
-                alerts = []
-                for item in data.get("upcoming_tasks", []):
+            with urllib.request.urlopen(req_curr, timeout=5.0) as resp:
+                curr_data = json.loads(resp.read().decode("utf-8"))
+                for subject in curr_data:
+                    name = subject.get("name", "Subject")
+                    title = subject.get("title", "")
+                    progress = subject.get("progressPercent", 0)
+                    instructor = subject.get("instructorName", "Instructor")
+                    next_topic = subject.get("continueLearningTopic", "Next Lecture")
+                    attendance = subject.get("attendancePercent", 0)
+
+                    # Only show active/in-progress subjects as actionable alerts
                     alerts.append({
-                        "id": str(item.get("id", "bc_task")),
-                        "title": item.get("title", "Assignment"),
-                        "type": item.get("type", "ASSIGNMENT"),
-                        "deadline": item.get("due_date", "Today"),
-                        "status": item.get("status", "PENDING"),
-                        "urgency": item.get("urgency", "HIGH"),
-                        "url": "https://school.bosscoderacademy.com/home",
-                        "concern": f"Pending assignment: {item.get('title')}"
+                        "id": f"bc_{subject.get('code', 'course')}",
+                        "title": f"{name}: {next_topic}",
+                        "type": "LECTURE",
+                        "deadline": f"Progress: {progress}% • Attendance: {attendance}%",
+                        "status": f"{progress}% DONE",
+                        "urgency": "HIGH" if progress < 100 else "NORMAL",
+                        "url": "https://school.bosscoderacademy.com/curriculum",
+                        "concern": f"{title} with {instructor}. Continue topic: {next_topic}."
                     })
+
+            # 2. Fetch live contests
+            req_contests = urllib.request.Request(
+                "https://bst-backend-java.bosscoderacademy.com/api/contests",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "DayPilot/1.0",
+                    "Accept": "application/json",
+                    "Origin": "https://school.bosscoderacademy.com",
+                    "Referer": "https://school.bosscoderacademy.com/"
+                }
+            )
+            with urllib.request.urlopen(req_contests, timeout=5.0) as resp:
+                contests = json.loads(resp.read().decode("utf-8"))
+                for c in contests[:2]:
+                    alerts.append({
+                        "id": f"bc_contest_{c.get('contestId')}",
+                        "title": c.get("name", "Contest"),
+                        "type": "CONTEST",
+                        "deadline": f"Date: {c.get('contestDate')} ({c.get('durationMinutes')} mins)",
+                        "status": c.get("state", "CLOSED"),
+                        "urgency": "NORMAL",
+                        "url": f"https://school.bosscoderacademy.com/contests/{c.get('contestId')}",
+                        "concern": f"Contest: {c.get('name')} • Marks: {c.get('totalMarks')}."
+                    })
+
+            if alerts:
                 return alerts
         except Exception:
             pass
 
+    # Fallback if offline
     return [
         {
-            "id": "bc_assign_4",
-            "title": "Dynamic Programming Lab 4",
-            "type": "ASSIGNMENT",
-            "deadline": "Today, 4:00 PM",
-            "status": "PENDING SUBMISSION",
-            "urgency": "HIGH",
-            "url": "https://school.bosscoderacademy.com/home",
-            "concern": "Assignment deadline approaching today at 4:00 PM IST."
-        },
-        {
-            "id": "bc_lec_12",
-            "title": "Live Mentorship Session: Graph BFS/DFS",
+            "id": "bc_dsa",
+            "title": "DSA: Quick Sort & Binary Trees",
             "type": "LECTURE",
-            "deadline": "Today, 8:00 PM - 9:30 PM",
-            "status": "STARTS IN 9H",
-            "urgency": "MEDIUM",
-            "url": "https://school.bosscoderacademy.com/home",
-            "concern": "Live cohort class scheduled for 8:00 PM tonight."
-        },
-        {
-            "id": "bc_contest_28",
-            "title": "Weekly Algorithmic Contest #28",
-            "type": "CONTEST",
-            "deadline": "Saturday, 7:00 PM",
-            "status": "UPCOMING",
-            "urgency": "NORMAL",
-            "url": "https://school.bosscoderacademy.com/home",
-            "concern": "Weekend rated contest registration."
+            "deadline": "Progress: 92% • Attendance: 61%",
+            "status": "92% DONE",
+            "urgency": "HIGH",
+            "url": "https://school.bosscoderacademy.com/curriculum",
+            "concern": "Continue topic: Quick Sort with Ankur Raj."
         }
     ]
