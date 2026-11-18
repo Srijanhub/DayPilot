@@ -15,6 +15,7 @@ import NewspaperPanel from "@/components/NewspaperPanel";
 import VoiceMemoPanel from "@/components/VoiceMemoPanel";
 import SpectrogramRibbon from "@/components/SpectrogramRibbon";
 import ActiveTabMonitorPanel from "@/components/ActiveTabMonitorPanel";
+import FlightDeckCopilot from "@/components/FlightDeckCopilot";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
 
 export default function FlightDeckPage() {
@@ -135,6 +136,9 @@ export default function FlightDeckPage() {
         <SpectrogramRibbon />
 
       </div>
+
+      {/* Global AI Copilot Communicator (⌘J) */}
+      <FlightDeckCopilot />
 
       {/* Footer */}
       <footer className="w-full border-t border-[var(--border-hairline)] py-3 px-6 text-center text-[10px] font-mono text-[var(--text-muted)]">
