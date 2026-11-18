@@ -97,9 +97,49 @@ async function collectAndFlush() {
   });
 }
 
+let inMemoryToken = "";
+
+async function getApiToken() {
+  if (inMemoryToken) return inMemoryToken;
+  try {
+    const storage = await chrome.storage.local.get(["daypilot_api_token"]);
+    if (storage.daypilot_api_token) {
+      inMemoryToken = storage.daypilot_api_token;
+      return inMemoryToken;
+    }
+  } catch (e) {}
+
+  // Fetch from FastAPI backend
+  try {
+    const res = await fetch("http://127.0.0.1:4000/api/token");
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.token) {
+        inMemoryToken = data.token;
+        await chrome.storage.local.set({ daypilot_api_token: data.token });
+        return inMemoryToken;
+      }
+    }
+  } catch (e) {}
+
+  // Fallback: fetch from Next.js frontend
+  try {
+    const res = await fetch("http://localhost:3000/api/token");
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.token) {
+        inMemoryToken = data.token;
+        await chrome.storage.local.set({ daypilot_api_token: data.token });
+        return inMemoryToken;
+      }
+    }
+  } catch (e) {}
+
+  return "";
+}
+
 async function sendToBackend(payload, endpoint = API_ENDPOINT) {
-  const storage = await chrome.storage.local.get(["daypilot_api_token"]);
-  const token = storage.daypilot_api_token || "";
+  const token = await getApiToken();
 
   fetch(endpoint, {
     method: "POST",

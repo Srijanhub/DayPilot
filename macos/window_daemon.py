@@ -11,10 +11,22 @@ import json
 import subprocess
 import urllib.request
 import urllib.error
+from pathlib import Path
 
 BACKEND_HEARTBEAT_URL = "http://127.0.0.1:4000/api/heartbeat"
 POLL_INTERVAL_SECONDS = 5.0
 IDLE_THRESHOLD_SECONDS = 60.0
+
+
+def get_api_token() -> str:
+    """Reads the secure DayPilot local token from ~/daypilot/token."""
+    token_file = Path.home() / "daypilot" / "token"
+    if token_file.exists():
+        try:
+            return token_file.read_text().strip()
+        except Exception:
+            pass
+    return ""
 
 
 def get_idle_time() -> float:
@@ -76,7 +88,10 @@ def send_heartbeat(app_name: str, bundle_id: str, window_title: str, idle_second
     req = urllib.request.Request(
         BACKEND_HEARTBEAT_URL,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-DayPilot-Token": get_api_token()
+        },
         method="POST"
     )
     try:

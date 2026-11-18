@@ -73,6 +73,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/api/token")
+def get_public_token():
+    """Returns the local token for local companion extensions and dashboards."""
+    return {"token": DAYPILOT_API_TOKEN}
+
+
 # Active Context Classifier instance
 classifier = ContextClassifier()
 
