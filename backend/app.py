@@ -21,12 +21,10 @@ from pydantic import BaseModel, Field
 from database import get_db_connection, init_db, get_today_range, upsert_bookmark
 from media_parser import parse_media_info
 from classifier import ContextClassifier
-from collectors.briefing_engine import synthesize_morning_briefing
 from dotenv import load_dotenv
+load_dotenv()
 
 from auth import DAYPILOT_API_TOKEN, verify_daypilot_token, DEFAULT_DISALLOWED_TOKEN
-
-load_dotenv()
 
 DEFAULT_BROWSER = os.environ.get("DAYPILOT_BROWSER", "Opera GX")
 

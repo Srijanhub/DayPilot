@@ -62,6 +62,15 @@ def clean_email_body(raw_text: str) -> str:
     return text
 
 
+DISCLAIMER_KEYWORDS = [
+    'unsubscribe', 'not interested', 'opt out', 'pvt ltd', 'pvt. ltd', 'inc.', 'llc',
+    'tech park', 'sohna road', 'almaden blvd', 'all rights reserved', 'terms and conditions',
+    'privacy policy', 'view in browser', 'manage preferences', 'zoom communications',
+    'thank you for choosing zoom', 'iris tech park', 'sector -', 'support@', 'noreply@',
+    'copyright', '©'
+]
+
+
 def extract_email_summary(subject: str, sender: str, body_text: str) -> str:
     """Generate a clean executive summary of the email content."""
     clean = clean_email_body(body_text)
@@ -82,22 +91,33 @@ def extract_email_summary(subject: str, sender: str, body_text: str) -> str:
         return "Google recommendation to review and adjust your privacy, backup, and security settings on this device."
     if "linkedin" in sender.lower() or "job alert" in lower_sub:
         return f"Career Alert: New matching role found — {subject}."
+    if "zoom" in sender.lower() and "meeting assets" in lower_sub:
+        return f"Zoom Recording & Assets ready: {subject.replace('Meeting assets for ', '').replace(' are ready!', '')}."
+
+    # Protect abbreviations from splitting
+    protected_text = clean
+    for abbrev in ['Pvt.', 'Ltd.', 'Inc.', 'Corp.', 'Mr.', 'Ms.', 'Dr.', 'U.S.', 'e.g.', 'i.e.']:
+        protected_text = protected_text.replace(abbrev, abbrev.replace('.', '@DOT@'))
 
     # Look for meaningful sentences that are not boilerplate
-    sentences = re.split(r'(?<=[.!?])\s+', clean)
-    meaningful = [
-        s.strip() for s in sentences
-        if len(s.strip()) > 15
-        and not s.lower().startswith(('hi ', 'hello', 'dear ', 'thanks', 'click here', '<!', '<'))
-        and not any(s.lower().startswith(p) for p in ['view in', 'unsubscribe', 'terms'])
-    ]
+    raw_sentences = re.split(r'[.!?]+(?:\s+|$)|[\n\r]+', protected_text)
+    meaningful = []
+    for s in raw_sentences:
+        s = s.replace('@DOT@', '.').strip()
+        if len(s) < 15:
+            continue
+        s_low = s.lower()
+        if any(dk in s_low for dk in DISCLAIMER_KEYWORDS):
+            continue
+        if s.startswith(('hi ', 'hello', 'dear ', 'thanks', 'click here', '<!', '<', '{', '[', 'http')):
+            continue
+        if any(s_low.startswith(p) for p in ['view in', 'unsubscribe', 'terms', 'privacy']):
+            continue
+        meaningful.append(s)
+
     if meaningful:
         summary = " ".join(meaningful[:2])
         return summary[:280] + ("..." if len(summary) > 280 else "")
-
-    if clean and not clean.startswith(('<', '<!')) and any(c.isalnum() for c in clean):
-        clean_snip = clean[:200]
-        return clean_snip + ("..." if len(clean) > 200 else "")
 
     return f"Email regarding: {subject}"
 

@@ -65,3 +65,7 @@ def test_strips_zero_width_spaces_and_zoom_boilerplate():
     assert "Thank you for choosing Zoom" not in cleaned_zoom
     assert "Almaden Blvd" not in cleaned_zoom
     assert "Meeting assets for Srijan Halder's Zoom Meeting are ready!" in cleaned_zoom
+
+    zoom_summary = extract_email_summary("Meeting assets for Srijan Halder's Zoom Meeting are ready!", "Zoom", zoom_raw)
+    assert "Zoom Recording & Assets ready" in zoom_summary
+    assert "Almaden Blvd" not in zoom_summary

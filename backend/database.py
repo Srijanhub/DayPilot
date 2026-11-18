@@ -39,7 +39,7 @@ def init_db():
         window_title TEXT,
         domain TEXT,
         url TEXT,
-        category TEXT CHECK(category IN ('WORK', 'STUDY', 'RELAX', 'LEISURE', 'IDLE')),
+        category TEXT CHECK(category IN ('WORK', 'STUDY', 'RELAX', 'LEISURE', 'IDLE', 'OTHER', 'COMMUNICATION', 'UNKNOWN')),
         duration_seconds INTEGER NOT NULL
     );
     """)

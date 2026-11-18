@@ -26,13 +26,11 @@ class ContextClassifier:
         # Classification rule tables (can be loaded or configured)
         self.work_apps = {
             "com.microsoft.vscode", "vscode", "terminal", "iterm2", "cursor",
-            "com.apple.terminal", "com.googlecode.iterm2", "xcode", "sublime_text",
-            "zoom.us", "us.zoom.xos", "zoom", "slack", "microsoft teams", "webex"
+            "com.apple.terminal", "com.googlecode.iterm2", "xcode", "sublime_text"
         }
         self.work_domains = {
             "github.com", "gitlab.com", "stackoverflow.com", "leetcode.com",
-            "developer.mozilla.org", "localhost", "127.0.0.1", "npm.im", "pypi.org",
-            "zoom.us", "app.zoom.us", "meet.google.com", "teams.microsoft.com", "slack.com"
+            "developer.mozilla.org", "localhost", "127.0.0.1", "npm.im", "pypi.org"
         }
 
         self.study_domains = {
@@ -46,8 +44,17 @@ class ContextClassifier:
             "twitch.tv", "reddit.com", "twitter.com", "x.com", "instagram.com"
         }
 
+        self.communication_apps = {
+            "slack", "discord", "whatsapp", "telegram", "messages", "zoom",
+            "us.zoom.xos", "zoom.us", "microsoft teams", "webex", "facetime"
+        }
+        self.communication_domains = {
+            "slack.com", "discord.com", "web.whatsapp.com", "zoom.us",
+            "app.zoom.us", "meet.google.com", "teams.microsoft.com"
+        }
+
     def classify_target(self, app_name: str, domain: Optional[str] = None, title: Optional[str] = None) -> str:
-        """Classify single raw telemetry into a target mode."""
+        """Classify single raw telemetry into a target category: WORK, STUDY, RELAX, COMMUNICATION, or OTHER."""
         app_clean = (app_name or "").lower()
         domain_clean = (domain or "").lower()
         title_clean = (title or "").lower()
@@ -66,9 +73,17 @@ class ContextClassifier:
         if any(keyword in title_clean for keyword in ["chapter ", "ch.", "episode", "season ", "manhwa", "manga", "anime"]):
             return "RELAX"
 
-        # 3. Work checks (IDE, Terminal, GitHub, Zoom Meetings, Video Calls)
-        if any(keyword in title_clean for keyword in ["zoom meeting", "zoom", "google meet", "huddle", "call", "webinar", "standup"]):
-            return "WORK"
+        # 3. Communication checks (Meetings, calls, chats)
+        if any(keyword in title_clean for keyword in ["zoom meeting", "google meet", "huddle", "call", "webinar", "standup"]):
+            return "COMMUNICATION"
+        for c_app in self.communication_apps:
+            if c_app in app_clean:
+                return "COMMUNICATION"
+        for c_dom in self.communication_domains:
+            if c_dom in domain_clean:
+                return "COMMUNICATION"
+
+        # 4. Work checks (IDE, Terminal, GitHub)
         for w_app in self.work_apps:
             if w_app in app_clean:
                 return "WORK"
@@ -76,8 +91,8 @@ class ContextClassifier:
             if w_dom in domain_clean:
                 return "WORK"
 
-        # Default fallback
-        return "WORK"
+        # Default fallback for unknown applications/domains
+        return "OTHER"
 
     def process_heartbeat(self, app_name: str, domain: Optional[str] = None,
                           title: Optional[str] = None, duration_seconds: int = 5,
@@ -125,20 +140,29 @@ class ContextClassifier:
             self.pending_start_time = None
             self.pending_active_seconds = 0
 
-        # Classify instantaneous target
-        target = self.classify_target(app_name, domain, title)
+        # Classify instantaneous target and map to productivity mode candidate
+        target_category = self.classify_target(app_name, domain, title)
+        if target_category == "STUDY":
+            target_candidate = "STUDY"
+        elif target_category == "RELAX":
+            target_candidate = "RELAX"
+        elif target_category in ("WORK", "COMMUNICATION"):
+            target_candidate = "WORK"
+        else:
+            # "OTHER" application: does NOT force a mode change; preserves currently committed mode
+            target_candidate = self.committed_mode
 
-        if target == self.committed_mode:
+        if target_candidate == self.committed_mode:
             # We are in current committed mode, reset any pending transition
             self.pending_mode = None
             self.pending_start_time = None
             self.pending_active_seconds = 0
             return self.committed_mode, False
 
-        # Target is different from committed mode
-        if self.pending_mode != target:
+        # Target candidate is different from committed mode
+        if self.pending_mode != target_candidate:
             # New candidate mode initiated
-            self.pending_mode = target
+            self.pending_mode = target_candidate
             self.pending_start_time = now
             self.pending_active_seconds = max(1, duration_seconds)
             return self.committed_mode, False
@@ -150,7 +174,7 @@ class ContextClassifier:
         if (self.pending_active_seconds >= self.hysteresis_threshold and 
             self.pending_start_time and (now - self.pending_start_time >= self.hysteresis_threshold)):
             old_mode = self.committed_mode
-            self.committed_mode = target
+            self.committed_mode = target_candidate
             self.pending_mode = None
             self.pending_start_time = None
             self.pending_active_seconds = 0
