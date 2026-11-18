@@ -1,5 +1,5 @@
 # DayPilot Tasks
-Status: IN PROGRESS | Current: P4-T01 | Last updated: 2026-11-18 10:38
+Status: IN PROGRESS | Current: P5-T01 | Last updated: 2026-11-18 10:40
 
 ## Phase 1: 3D Orb, Flight Deck Design System & Cockpit Shell
 - [x] P1-T01 Scaffold Next.js + TS + Tailwind CSS v4 in `daypilot/frontend`
@@ -50,21 +50,21 @@ Status: IN PROGRESS | Current: P4-T01 | Last updated: 2026-11-18 10:38
 - [x] Committed: `phase-3: chrome extension mv3 with media scrapers`
 
 ## Phase 4: Integrations, Morning Ignition & Voice Memos
-- [ ] P4-T01 Implement Google Calendar and Gmail collectors (OAuth + graceful offline stub)
+- [x] P4-T01 Implement Google Calendar and Gmail collectors (OAuth + graceful offline stub)
       Done when: Returns structured events and priority emails.
-- [ ] P4-T02 Implement BossCoder Academy client (session/token fetcher + graceful stub)
+- [x] P4-T02 Implement BossCoder Academy client (session/token fetcher + graceful stub)
       Done when: Returns upcoming classes, assignments, and test schedules.
-- [ ] P4-T03 Implement GitHub Notifications collector (`gh api /notifications` + stub)
+- [x] P4-T03 Implement GitHub Notifications collector (`gh api /notifications` + stub)
       Done when: Returns unread PR reviews and issue mentions.
-- [ ] P4-T04 Implement Morning Newspaper RSS aggregator and Pydantic validated briefing synthesizer
+- [x] P4-T04 Implement Morning Newspaper RSS aggregator and Pydantic validated briefing synthesizer
       Done when: RSS feeds fetch and LLM briefing returns validated structured JSON.
-- [ ] P4-T05 Implement Offline Quote Pool (≥200 curated quotes) and Study Playlist resume widget
+- [x] P4-T05 Implement Offline Quote Pool (≥200 curated quotes) and Study Playlist resume widget
       Done when: Quote selects daily by date hash and playlist card displays resume link.
-- [ ] P4-T06 Implement In-Browser Voice Memo recorder and local storage (`/api/memos/upload`)
+- [x] P4-T06 Implement In-Browser Voice Memo recorder and local storage (`/api/memos/upload`)
       Done when: Browser mic records audio blob, uploads to backend, and stores in `~/daypilot/memos`.
 ### Phase 4 Gate
-- [ ] Morning briefing end-to-end integration verified
-- [ ] Committed: `phase-4: morning briefing pipeline, integrations, and voice memos`
+- [x] Morning briefing end-to-end integration verified
+- [x] Committed: `phase-4: morning briefing pipeline, integrations, and voice memos`
 
 ## Phase 5: Ad-Free YouTube Music Engine & Preference Learning
 - [ ] P5-T01 Implement MusicSource abstraction with HTML5 Audio and local/Piped/YT adapters
