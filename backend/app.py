@@ -70,8 +70,9 @@ class OverridePayload(BaseModel):
 async def on_startup():
     init_db()
     import asyncio
-    from history_syncer import run_periodic_history_sync
-    asyncio.create_task(run_periodic_history_sync(interval_seconds=1800))
+    from unified_syncer import sync_engine
+    sync_engine.set_broadcast_callback(broadcast_state)
+    asyncio.create_task(sync_engine.start_background_loop())
 
 
 async def broadcast_state(event_type: str, data: Dict[str, Any]):
@@ -353,8 +354,15 @@ def get_timeline():
 
 @app.get("/api/briefing/morning")
 def get_morning_briefing():
-    briefing = synthesize_morning_briefing()
-    return briefing.model_dump()
+    from unified_syncer import sync_engine
+    return sync_engine.get_cached_briefing()
+
+
+@app.post("/api/sync/all")
+async def sync_all_connected_services():
+    from unified_syncer import sync_engine
+    report = await sync_engine.sync_all_now()
+    return report
 
 
 @app.get("/api/briefing/nightly")

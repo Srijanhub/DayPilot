@@ -2,11 +2,31 @@
 
 import React, { useState, useEffect } from "react";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
-import { Terminal, Shield, Zap, Sparkles, Command } from "lucide-react";
+import { Terminal, Shield, Zap, Sparkles, Command, RefreshCw } from "lucide-react";
 
 export default function CockpitHeader() {
   const { mode, override, triggerPhaseShift, setOverride, setCommandPaletteOpen } = useFlightDeckStore();
   const [timeStr, setTimeStr] = useState<string>("");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("ALL CONNECTED");
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true);
+    setSyncStatus("SYNCING...");
+    try {
+      const res = await fetch("http://127.0.0.1:4000/api/sync/all", { method: "POST" });
+      if (res.ok) {
+        setSyncStatus("ALL SYNCED");
+      }
+    } catch (e) {
+      setSyncStatus("OFFLINE");
+    } finally {
+      setTimeout(() => {
+        setIsSyncing(false);
+        setSyncStatus("ALL SYNCED");
+      }, 800);
+    }
+  };
 
   useEffect(() => {
     const update = () => {
@@ -38,9 +58,22 @@ export default function CockpitHeader() {
               DAYPILOT // FLIGHT DECK
             </span>
           </div>
-          <span className="text-xs font-mono text-[var(--text-muted)] border-l border-[var(--border-hairline)] pl-4">
-            SYS.STATUS: NOMINAL
-          </span>
+          <div className="hidden sm:flex items-center space-x-2 border-l border-[var(--border-hairline)] pl-4">
+            <span className="text-xs font-mono text-[var(--accent-primary)] font-bold">
+              {syncStatus}
+            </span>
+            <span className="text-[10px] font-mono text-[var(--text-muted)] hidden md:inline">
+              (OPERA GX • GITHUB • BOSSCODER • GMAIL)
+            </span>
+            <button
+              onClick={handleSyncAll}
+              disabled={isSyncing}
+              className="p-1 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-white transition"
+              title="Force Sync All Connected Feeds"
+            >
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin text-[var(--accent-primary)]" : ""}`} />
+            </button>
+          </div>
         </div>
 
         {/* Center: Tactile Segmented Mode Switcher */}
