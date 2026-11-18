@@ -588,3 +588,16 @@ def get_music_suggestion():
         }
     }
     return suggestions.get(mode, suggestions["WORK"])
+
+
+@app.post("/api/open-url")
+def open_system_url(payload: Dict[str, Any]):
+    url = payload.get("url", "")
+    if url and (url.startswith("http://") or url.startswith("https://")):
+        import subprocess
+        try:
+            subprocess.Popen(["open", url])
+            return {"status": "ok", "url": url}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    return {"status": "invalid_url"}
