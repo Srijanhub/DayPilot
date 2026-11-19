@@ -29,8 +29,8 @@ def get_api_token() -> str:
     return ""
 
 
-def get_idle_time() -> float:
-    """Returns system idle seconds via ioreg."""
+def get_idle_time():
+    """Returns system idle seconds via ioreg or None on failure."""
     try:
         output = subprocess.check_output(
             ["ioreg", "-c", "IOHIDSystem"],
@@ -42,7 +42,7 @@ def get_idle_time() -> float:
                 return nanos / 1_000_000_000.0
     except Exception:
         pass
-    return 0.0
+    return None
 
 
 def get_frontmost_window_info():
@@ -108,6 +108,10 @@ def main():
         try:
             idle_secs = get_idle_time()
             app_name, bundle_id, window_title = get_frontmost_window_info()
+            if app_name.lower() == "loginwindow":
+                idle_secs = 9999.0
+            elif idle_secs is None:
+                idle_secs = 65.0 # If idle time detection fails, do not assume 0s active screen usage
             send_heartbeat(app_name, bundle_id, window_title, idle_secs)
         except Exception as e:
             pass

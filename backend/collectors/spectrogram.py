@@ -44,10 +44,19 @@ def generate_24h_spectrogram(start_ts: str, end_ts: str) -> List[Dict[str, Any]]
     Distributes activity events across overlapping slots to accurately
     measure active seconds, intensity, and dominant application per half-hour.
     """
-    day_date_str = start_ts.split(" ")[0]
-    day_start = datetime.strptime(f"{day_date_str} 00:00:00", "%Y-%m-%d %H:%M:%S")
+    from datetime import timezone
+    local_now = datetime.now().astimezone()
+    local_tz = local_now.tzinfo
+    try:
+        raw_start = datetime.fromisoformat(start_ts.replace(" ", "T"))
+        if raw_start.tzinfo is None:
+            raw_start = raw_start.replace(tzinfo=timezone.utc)
+        target_date = raw_start.astimezone(local_tz).date()
+    except Exception:
+        target_date = local_now.date()
+    day_start = datetime.combine(target_date, datetime.min.time())
 
-    # Initialize 48 half-hour slots
+    # Initialize 48 half-hour slots covering 00:00 to 24:00 local time
     slots: List[Dict[str, Any]] = []
     for i in range(48):
         s_start = day_start + timedelta(minutes=i * 30)
@@ -78,10 +87,17 @@ def generate_24h_spectrogram(start_ts: str, end_ts: str) -> List[Dict[str, Any]]
     finally:
         conn.close()
 
-    # Distribute event durations across overlapping half-hour windows
+    # Distribute event durations across overlapping half-hour windows in local time
     for r in rows:
         try:
-            ts = datetime.fromisoformat(r["timestamp"])
+            # Parse UTC timestamp and convert to local datetime
+            raw_ts = datetime.fromisoformat(r["timestamp"])
+            if raw_ts.tzinfo is None:
+                ts_utc = raw_ts.replace(tzinfo=timezone.utc)
+            else:
+                ts_utc = raw_ts.astimezone(timezone.utc)
+            ts = ts_utc.astimezone(local_now.tzinfo).replace(tzinfo=None)
+
             dur = max(5, r["duration_seconds"] or 5)
             evt_end = ts + timedelta(seconds=dur)
 

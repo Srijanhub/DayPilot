@@ -26,7 +26,7 @@ class MorningBriefingSchema(BaseModel):
     morning_quote_author: str
     priority_focus: str
     schedule_blocks: List[ScheduleBlock]
-    newspaper_digest: List[str]
+    newspaper_digest: List[Any]
     bosscoder_alerts: List[Dict[str, Any]]
     github_notifications: List[Dict[str, Any]]
     calendar_events: List[Dict[str, Any]]

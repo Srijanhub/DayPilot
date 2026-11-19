@@ -79,16 +79,5 @@ def get_bosscoder_alerts() -> List[Dict[str, Any]]:
         except Exception:
             pass
 
-    # Fallback if offline
-    return [
-        {
-            "id": "bc_dsa",
-            "title": "DSA: Quick Sort & Binary Trees",
-            "type": "LECTURE",
-            "deadline": "Progress: 92% • Attendance: 61%",
-            "status": "92% DONE",
-            "urgency": "HIGH",
-            "url": "https://school.bosscoderacademy.com/curriculum",
-            "concern": "Continue topic: Quick Sort with Ankur Raj."
-        }
-    ]
+    # Clean fallback: Return empty list when offline or unauthenticated (no synthetic mocks)
+    return []

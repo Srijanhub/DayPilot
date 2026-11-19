@@ -106,7 +106,7 @@ class OverridePayload(BaseModel):
 async def broadcast_state(event_type: str, data: Dict[str, Any]):
     message = json.dumps({"type": event_type, "data": data})
     disconnected = []
-    for ws in active_websockets:
+    for ws in list(active_websockets):
         try:
             await ws.send_text(message)
         except Exception:
@@ -120,19 +120,21 @@ async def broadcast_state(event_type: str, data: Dict[str, Any]):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_websockets.append(websocket)
-    # Immediately send current state
-    await websocket.send_text(json.dumps({
-        "type": "INITIAL_STATE",
-        "data": {
-            "mode": classifier.committed_mode,
-            "override": classifier.manual_override,
-            "timestamp": time.time()
-        }
-    }))
     try:
+        # Immediately send current state
+        await websocket.send_text(json.dumps({
+            "type": "INITIAL_STATE",
+            "data": {
+                "mode": classifier.committed_mode,
+                "override": classifier.manual_override,
+                "timestamp": time.time()
+            }
+        }))
         while True:
             await websocket.receive_text()
-    except WebSocketDisconnect:
+    except Exception:
+        pass
+    finally:
         if websocket in active_websockets:
             active_websockets.remove(websocket)
 
@@ -151,27 +153,33 @@ def query_live_tab() -> Dict[str, Any]:
         if not row:
             return {"is_active": False}
 
-        # A heartbeat older than 30s means nothing is actively focused right now
+        # A heartbeat older than 75s means nothing is actively focused right now
         cursor.execute(
             "SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER);",
             (row["timestamp"],),
         )
         age = cursor.fetchone()[0]
-        if age is None or age > 30:
+        if age is None or age > 75 or age < -60:
             return {"is_active": False}
 
-        # Count consecutive heartbeats on same title/domain
+        # Calculate consecutive dwell by walking backwards through recent events
+        target_title = row["window_title"] or ""
+        target_app = row["app_name"] or ""
         cursor.execute("""
-        SELECT SUM(duration_seconds) as current_dwell
-        FROM (
-            SELECT duration_seconds, window_title
+            SELECT app_name, window_title, duration_seconds
             FROM activity_events
-            ORDER BY id DESC LIMIT 100
-        )
-        WHERE window_title = ?;
-        """, (row["window_title"],))
-        dwell_row = cursor.fetchone()
-        dwell_sec = dwell_row["current_dwell"] if dwell_row and dwell_row["current_dwell"] else 5
+            ORDER BY id DESC LIMIT 200;
+        """)
+        recent_rows = cursor.fetchall()
+        dwell_sec = 0
+        for r in recent_rows:
+            r_title = r["window_title"] or ""
+            r_app = r["app_name"] or ""
+            if (target_title and r_title == target_title) or (not target_title and r_app == target_app):
+                dwell_sec += (r["duration_seconds"] or 5)
+            else:
+                break
+        dwell_sec = max(5, dwell_sec)
 
         return {
             "is_active": True,
@@ -196,8 +204,8 @@ async def get_live_tab():
 # Nothing is read from history; a stale snapshot (browser closed, extension
 # paused/disconnected) expires on its own, so closed tabs never linger.
 # ---------------------------------------------------------------------------
-OPEN_TABS_TTL_SECONDS = 20
-_open_tabs: Dict[str, Any] = {"tabs": [], "updated_at": 0.0}
+OPEN_TABS_TTL_SECONDS = 75
+_open_tabs: Dict[str, Any] = {"tabs": [], "updated_at": 0.0, "paused": False}
 
 
 class OpenTab(BaseModel):
@@ -211,13 +219,16 @@ class OpenTab(BaseModel):
 
 class OpenTabsPayload(BaseModel):
     tabs: List[OpenTab] = Field(default_factory=list)
+    paused: bool = False
 
 
 def _open_tabs_view() -> Dict[str, Any]:
+    is_paused = _open_tabs.get("paused", False)
     fresh = _open_tabs["updated_at"] > 0 and (time.time() - _open_tabs["updated_at"]) <= OPEN_TABS_TTL_SECONDS
     return {
-        "connected": fresh,
-        "tabs": _open_tabs["tabs"] if fresh else [],
+        "connected": fresh and not is_paused,
+        "paused": is_paused,
+        "tabs": _open_tabs["tabs"] if (fresh and not is_paused) else [],
         "updated_at": _open_tabs["updated_at"],
     }
 
@@ -225,6 +236,14 @@ def _open_tabs_view() -> Dict[str, Any]:
 @authenticated_router.post("/api/tabs/open")
 async def report_open_tabs(payload: OpenTabsPayload):
     from urllib.parse import urlparse
+    if payload.paused:
+        _open_tabs["tabs"] = []
+        _open_tabs["updated_at"] = time.time()
+        _open_tabs["paused"] = True
+        await broadcast_state("TABS_UPDATED", _open_tabs_view())
+        return {"status": "ok", "paused": True}
+
+    _open_tabs["paused"] = False
     tabs = []
     for t in payload.tabs:
         if not t.url.startswith(("http://", "https://")):
@@ -693,18 +712,37 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
+            # Deduplicate overlapping heartbeats from concurrent collectors (window daemon + extension) within 4s
             cursor.execute("""
-            INSERT INTO activity_events (app_name, window_title, domain, url, category, duration_seconds)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """, (
-                payload.app_name,
-                payload.window_title,
-                payload.domain,
-                payload.url,
-                current_mode,
-                payload.duration_seconds
-            ))
-            conn.commit()
+                SELECT timestamp, app_name, window_title
+                FROM activity_events
+                ORDER BY id DESC LIMIT 1;
+            """)
+            last_ev = cursor.fetchone()
+            is_dup = False
+            if last_ev:
+                cursor.execute(
+                    "SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER);",
+                    (last_ev["timestamp"],)
+                )
+                gap = cursor.fetchone()[0]
+                if gap is not None and 0 <= gap < 4:
+                    if last_ev["app_name"] == payload.app_name or (payload.window_title and last_ev["window_title"] == payload.window_title):
+                        is_dup = True
+
+            if not is_dup:
+                cursor.execute("""
+                INSERT INTO activity_events (app_name, window_title, domain, url, category, duration_seconds)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """, (
+                    payload.app_name,
+                    payload.window_title,
+                    payload.domain,
+                    payload.url,
+                    current_mode,
+                    payload.duration_seconds
+                ))
+                conn.commit()
         finally:
             conn.close()
 
@@ -733,6 +771,9 @@ async def ingest_heartbeat(payload: HeartbeatPayload):
             "override": classifier.manual_override,
             "reason": "AUTO_CLASSIFIER_HYSTERESIS"
         })
+
+    # Broadcast live tab update in real time so ACTIVE FOREGROUND WINDOW stays live without manual refresh
+    await broadcast_state("LIVE_TAB_UPDATED", query_live_tab())
 
     return {"status": "ok", "mode": current_mode}
 
@@ -842,6 +883,22 @@ async def trigger_history_sync():
     return {"status": "ok", "synced_count": count}
 
 
+class ActivateTabPayload(BaseModel):
+    tab_id: int
+    window_id: Optional[int] = None
+    url: Optional[str] = None
+
+
+@authenticated_router.post("/api/tabs/activate")
+async def activate_browser_tab(payload: ActivateTabPayload):
+    await broadcast_state("ACTIVATE_TAB", {
+        "tab_id": payload.tab_id,
+        "window_id": payload.window_id,
+        "url": payload.url
+    })
+    return {"status": "ok", "tab_id": payload.tab_id}
+
+
 @authenticated_router.post("/api/open-url")
 def open_system_url(payload: Dict[str, Any]):
     url = payload.get("url", "")
@@ -856,8 +913,8 @@ def open_system_url(payload: Dict[str, Any]):
             subprocess.Popen(["open", url])
             return {"status": "ok", "url": url, "browser": "default"}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
-    return {"status": "invalid_url"}
+            raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=400, detail="Invalid or missing URL")
 
 
 # Register authenticated router protecting all state-changing endpoints

@@ -229,6 +229,12 @@ export const daypilotApi = {
       body: JSON.stringify({ url })
     }),
 
+  activateTab: (tabId: number, windowId?: number | null, url?: string) =>
+    apiFetch<{ status: string; tab_id: number }>("/api/tabs/activate", {
+      method: "POST",
+      body: JSON.stringify({ tab_id: tabId, window_id: windowId, url })
+    }),
+
   uploadMemo: (formData: FormData) =>
     apiFetch<any>("/api/memos/upload", {
       method: "POST",

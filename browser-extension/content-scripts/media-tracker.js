@@ -110,6 +110,7 @@
       const video = document.querySelector("video");
       if (!video) return;
 
+      const curTitle = document.title || "";
       let title = "";
       let unit = "";
       let mediaType = "SHOW";
@@ -117,7 +118,7 @@
       if (hostname.includes("youtube.com")) {
         if (hostname.includes("music.")) return; // Exclude music
         const ytTitleEl = document.querySelector("ytd-watch-metadata #title h1 yt-formatted-string, h1.ytd-video-primary-info-renderer, #title h1");
-        title = ytTitleEl ? ytTitleEl.textContent.trim() : pageTitle.replace("- YouTube", "").trim();
+        title = ytTitleEl ? ytTitleEl.textContent.trim() : curTitle.replace("- YouTube", "").trim();
         
         // Extract episode or part if present
         const epMatch = title.match(/(?:ep\.?|episode|part)\s*(\d+)/i);
@@ -133,7 +134,7 @@
       } else if (hostname.includes("crunchyroll.com")) {
         mediaType = "ANIME";
         const crTitleEl = document.querySelector("h1.heading--is-family-type-heavy, h1.title");
-        title = crTitleEl ? crTitleEl.textContent.trim() : pageTitle.replace(" - Watch on Crunchyroll", "").trim();
+        title = crTitleEl ? crTitleEl.textContent.trim() : curTitle.replace(" - Watch on Crunchyroll", "").trim();
         
         const epMatch = title.match(/(?:s\d+\s*e\d+|episode\s*\d+|ep\.?\s*\d+[^–|-]*)/i);
         if (epMatch) {
@@ -145,13 +146,13 @@
       } else if (hostname.includes("hianime.to") || hostname.includes("aniwatch.to") || hostname.includes("9anime")) {
         mediaType = "ANIME";
         const animeNameEl = document.querySelector(".film-name a, .heading--is-family-type-heavy");
-        title = animeNameEl ? animeNameEl.textContent.trim() : pageTitle.replace(/^Watch\s+/i, "").split(/[-–|]/)[0].trim();
+        title = animeNameEl ? animeNameEl.textContent.trim() : curTitle.replace(/^Watch\s+/i, "").split(/[-–|]/)[0].trim();
         
         const epActive = document.querySelector(".ep-item.active");
         if (epActive) {
           unit = `Episode ${epActive.getAttribute("data-number") || epActive.textContent.trim()}`;
         } else {
-          const epMatch = pageTitle.match(/episode\s*(\d+)/i);
+          const epMatch = curTitle.match(/episode\s*(\d+)/i);
           unit = epMatch ? `Episode ${epMatch[1]}` : "Episode";
         }
       } else if (hostname.includes("netflix.com")) {
@@ -163,23 +164,23 @@
           title = h4 ? h4.textContent.trim() : netflixTitle.textContent.trim();
           unit = span ? span.textContent.trim() : "Episode";
         } else {
-          title = pageTitle.replace("- Netflix", "").trim();
+          title = curTitle.replace("- Netflix", "").trim();
           unit = "Episode";
         }
       } else if (hostname.includes("hotstar.com") || hostname.includes("disneyplus.com")) {
         mediaType = "SHOW";
         const hsTitle = document.querySelector(".player-metadata-title, .title-field");
-        title = hsTitle ? hsTitle.textContent.trim() : pageTitle.split(/[-–|]/)[0].trim();
+        title = hsTitle ? hsTitle.textContent.trim() : curTitle.split(/[-–|]/)[0].trim();
         const hsSub = document.querySelector(".player-metadata-subtitle");
         unit = hsSub ? hsSub.textContent.trim() : "Episode";
       } else if (hostname.includes("primevideo.com")) {
         mediaType = "SHOW";
         const primeTitle = document.querySelector(".atvwebplayersdk-title-text");
-        title = primeTitle ? primeTitle.textContent.trim() : pageTitle.split(/[-–|]/)[0].trim();
+        title = primeTitle ? primeTitle.textContent.trim() : curTitle.split(/[-–|]/)[0].trim();
         const primeSub = document.querySelector(".atvwebplayersdk-subtitle-text");
         unit = primeSub ? primeSub.textContent.trim() : "Episode";
       } else {
-        title = pageTitle.split(/[-–|]/)[0].trim();
+        title = curTitle.split(/[-–|]/)[0].trim();
         unit = "Episode";
       }
 

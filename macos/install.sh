@@ -8,13 +8,17 @@ mkdir -p "$LAUNCH_AGENTS_DIR"
 
 MORNING_PLIST="$SCRIPT_DIR/com.daypilot.morning.plist"
 NIGHTLY_PLIST="$SCRIPT_DIR/com.daypilot.nightly.plist"
+WINDOWDAEMON_PLIST="$SCRIPT_DIR/com.daypilot.windowdaemon.plist"
 
 cp "$MORNING_PLIST" "$LAUNCH_AGENTS_DIR/"
 cp "$NIGHTLY_PLIST" "$LAUNCH_AGENTS_DIR/"
+cp "$WINDOWDAEMON_PLIST" "$LAUNCH_AGENTS_DIR/"
 
-launchctl load "$LAUNCH_AGENTS_DIR/com.daypilot.morning.plist"
-launchctl load "$LAUNCH_AGENTS_DIR/com.daypilot.nightly.plist"
+launchctl load "$LAUNCH_AGENTS_DIR/com.daypilot.morning.plist" 2>/dev/null
+launchctl load "$LAUNCH_AGENTS_DIR/com.daypilot.nightly.plist" 2>/dev/null
+launchctl load "$LAUNCH_AGENTS_DIR/com.daypilot.windowdaemon.plist" 2>/dev/null
 
 echo "DayPilot launchd daemons successfully installed in $LAUNCH_AGENTS_DIR."
 echo "09:00 AM: Morning Ignition (weekdays)"
 echo "01:00 AM: Nightly Retrospective (daily)"
+echo "Continuous: macOS Window Activity Daemon"

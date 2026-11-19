@@ -59,14 +59,22 @@ class ContextClassifier:
         domain_clean = (domain or "").lower()
         title_clean = (title or "").lower()
 
-        # 1. Study checks (BossCoder, LMS, course lectures)
+        # 1. YouTube handling (study vs relax)
+        if "youtube.com" in domain_clean or "youtu.be" in domain_clean:
+            is_edu = any(kw in title_clean for kw in [
+                "tutorial", "course", "lecture", "dsa", "python", "algorithm", "learn", "how to",
+                "system design", "code", "programming", "react", "next.js", "database", "sql", "bosscoder"
+            ])
+            return "STUDY" if is_edu else "RELAX"
+
+        # 2. Study checks (BossCoder, LMS, course lectures)
         for s_dom in self.study_domains:
             if s_dom in domain_clean:
                 return "STUDY"
         if any(keyword in title_clean for keyword in ["bosscoder", "lecture", "algorithm", "data structure", "assignment"]):
             return "STUDY"
 
-        # 2. Relax checks (Shows, Anime, Manhwa, Social)
+        # 3. Relax checks (Shows, Anime, Manhwa, Social)
         for r_dom in self.relax_domains:
             if r_dom in domain_clean:
                 return "RELAX"

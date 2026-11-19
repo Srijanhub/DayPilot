@@ -21,6 +21,30 @@ OPERA_GX_HISTORY_PATH = Path.home() / "Library/Application Support/com.operasoft
 TEMP_HISTORY_COPY = Path("/tmp/daypilot_opera_history.db")
 
 
+def _safe_copy_history(src: Path, dst: Path):
+    shutil.copy2(src, dst)
+    wal = src.parent / (src.name + "-wal")
+    if wal.exists():
+        try:
+            shutil.copy2(wal, dst.parent / (dst.name + "-wal"))
+        except Exception:
+            pass
+    shm = src.parent / (src.name + "-shm")
+    if shm.exists():
+        try:
+            shutil.copy2(shm, dst.parent / (dst.name + "-shm"))
+        except Exception:
+            pass
+
+
+def _cleanup_history_copy(dst: Path):
+    for p in [dst, dst.parent / (dst.name + "-wal"), dst.parent / (dst.name + "-shm")]:
+        try:
+            p.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def sync_opera_gx_history(limit_days: int = 30) -> int:
     """
     Safely copies Opera GX's SQLite History file and extracts genuine entertainment consumption.
@@ -31,8 +55,8 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
 
     temp_file = Path(f"/tmp/daypilot_opera_bkm_{os.getpid()}_{time.time_ns()}.db")
     try:
-        # Create a safe read copy to avoid lock collisions with running Opera GX
-        shutil.copy2(OPERA_GX_HISTORY_PATH, temp_file)
+        # Create a safe read copy (including WAL/SHM) to avoid lock collisions with running Opera GX
+        _safe_copy_history(OPERA_GX_HISTORY_PATH, temp_file)
     except Exception as e:
         print(f"[HistorySyncer] Failed to copy Opera GX history: {e}")
         return 0
@@ -43,7 +67,7 @@ def sync_opera_gx_history(limit_days: int = 30) -> int:
 
         query = """
         SELECT 
-            datetime((last_visit_time/1000000)-11644473600, 'unixepoch', 'localtime') as visit_time,
+            datetime((last_visit_time/1000000)-11644473600, 'unixepoch') as visit_time,
             title,
             url
         FROM urls
@@ -248,7 +272,7 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
 
     temp_file = Path(f"/tmp/daypilot_opera_act_{os.getpid()}_{time.time_ns()}.db")
     try:
-        shutil.copy2(OPERA_GX_HISTORY_PATH, temp_file)
+        _safe_copy_history(OPERA_GX_HISTORY_PATH, temp_file)
     except Exception as e:
         print(f"[HistorySyncer] Failed to copy Opera GX history for activity: {e}")
         return 0
@@ -258,17 +282,18 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
         h_conn = sqlite3.connect(str(temp_file))
         h_cur = h_conn.cursor()
 
-        since_dt = (datetime.now() - timedelta(hours=limit_hours)).strftime("%Y-%m-%d %H:%M:%S")
+        from datetime import timezone
+        since_dt = (datetime.now(timezone.utc) - timedelta(hours=limit_hours)).strftime("%Y-%m-%d %H:%M:%S")
 
         query = """
         SELECT 
-            datetime((v.visit_time/1000000)-11644473600, 'unixepoch', 'localtime') as visit_time,
+            datetime((v.visit_time/1000000)-11644473600, 'unixepoch') as visit_time,
             u.title,
             u.url,
             v.visit_duration
         FROM visits v
         JOIN urls u ON v.url = u.id
-        WHERE datetime((v.visit_time/1000000)-11644473600, 'unixepoch', 'localtime') >= ?
+        WHERE datetime((v.visit_time/1000000)-11644473600, 'unixepoch') >= ?
         ORDER BY v.visit_time ASC;
         """
         h_cur.execute(query, (since_dt,))
@@ -336,10 +361,7 @@ def sync_opera_gx_activity(limit_hours: int = 48) -> int:
     except Exception as e:
         print(f"[HistorySyncer] Error syncing Opera GX activity: {e}")
     finally:
-        try:
-            temp_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+        _cleanup_history_copy(temp_file)
 
     return inserted_count
 

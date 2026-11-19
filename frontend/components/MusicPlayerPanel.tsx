@@ -8,6 +8,7 @@ export default function MusicPlayerPanel() {
   const { mode, setAudioEnergy } = useFlightDeckStore();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrackIdx, setCurrentTrackIdx] = useState(0);
+  const [barHeights, setBarHeights] = useState<number[]>(() => Array(24).fill(10));
 
   const playlistClusters = {
     WORK: {
@@ -45,6 +46,7 @@ export default function MusicPlayerPanel() {
   // Simulated visualizer feeding the 3D Orb shader
   useEffect(() => {
     let animId: number;
+    let intervalId: NodeJS.Timeout;
     let t = 0;
     if (isPlaying) {
       const loop = () => {
@@ -55,10 +57,23 @@ export default function MusicPlayerPanel() {
         animId = requestAnimationFrame(loop);
       };
       loop();
+
+      intervalId = setInterval(() => {
+        setBarHeights(
+          Array.from({ length: 24 }).map((_, i) => {
+            const val = Math.abs(Math.sin(t * 2 + i * 0.5)) * 75 + Math.random() * 25;
+            return Math.max(15, Math.min(100, Math.round(val)));
+          })
+        );
+      }, 100);
     } else {
       setAudioEnergy(0.0);
+      setBarHeights(Array(24).fill(10));
     }
-    return () => cancelAnimationFrame(animId);
+    return () => {
+      cancelAnimationFrame(animId);
+      clearInterval(intervalId);
+    };
   }, [isPlaying, setAudioEnergy]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
@@ -119,20 +134,17 @@ export default function MusicPlayerPanel() {
 
       {/* Audio Visualizer Bars */}
       <div className="flex items-end space-x-1 h-5 pt-1 px-1">
-        {Array.from({ length: 24 }).map((_, i) => {
-          const height = isPlaying ? Math.max(15, Math.sin(i * 0.8) * 100) : 10;
-          return (
-            <div
-              key={i}
-              className="flex-1 rounded-t-sm transition-all duration-150"
-              style={{
-                height: `${height}%`,
-                backgroundColor: "var(--accent-primary)",
-                opacity: isPlaying ? 0.8 : 0.2
-              }}
-            />
-          );
-        })}
+        {barHeights.map((height, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-t-sm transition-all duration-100"
+            style={{
+              height: `${height}%`,
+              backgroundColor: "var(--accent-primary)",
+              opacity: isPlaying ? 0.8 : 0.2
+            }}
+          />
+        ))}
       </div>
     </div>
   );

@@ -29,9 +29,7 @@ def test_classify_activity_category():
 
 
 def test_generate_24h_spectrogram_empty():
-    today = date.today().isoformat()
-    start_ts = f"{today} 00:00:00"
-    end_ts = f"{today} 23:59:59"
+    start_ts, end_ts = database.get_today_range()
 
     slots = generate_24h_spectrogram(start_ts, end_ts)
     assert len(slots) == 48
@@ -41,21 +39,25 @@ def test_generate_24h_spectrogram_empty():
 
 
 def test_generate_24h_spectrogram_with_events():
+    from datetime import timezone
     conn = database.get_db_connection()
-    today = date.today().isoformat()
+    local_now = datetime.now().astimezone()
+    # 10:00 local time converted to UTC string stored in DB
+    local_10 = datetime.combine(local_now.date(), datetime.min.time(), tzinfo=local_now.tzinfo).replace(hour=10)
+    utc_str = local_10.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     try:
         cur = conn.cursor()
-        # Insert a 45-minute event from 10:00 to 10:45
+        # Insert a 45-minute event from 10:00 to 10:45 local time
         cur.execute("""
             INSERT INTO activity_events (timestamp, app_name, window_title, category, duration_seconds)
             VALUES (?, ?, ?, ?, ?);
-        """, (f"{today} 10:00:00", "VS Code", "DayPilot Project", "WORK", 2700))
+        """, (utc_str, "VS Code", "DayPilot Project", "WORK", 2700))
         conn.commit()
     finally:
         conn.close()
 
-    start_ts = f"{today} 00:00:00"
-    end_ts = f"{today} 23:59:59"
+    start_ts, end_ts = database.get_today_range()
 
     slots = generate_24h_spectrogram(start_ts, end_ts)
     assert len(slots) == 48

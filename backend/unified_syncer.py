@@ -159,7 +159,7 @@ class UnifiedSyncEngine:
     def sync_github(self):
         try:
             data = get_github_notifications()
-            if data:
+            if data is not None:
                 self.github_data = data
             self._last_github_sync = time.time()
         except Exception as e:
@@ -168,7 +168,7 @@ class UnifiedSyncEngine:
     def sync_bosscoder(self):
         try:
             data = get_bosscoder_alerts()
-            if data:
+            if data is not None:
                 self.bosscoder_data = data
             self._last_bosscoder_sync = time.time()
         except Exception as e:
@@ -185,10 +185,8 @@ class UnifiedSyncEngine:
 
     def rebuild_briefing_cache(self):
         """Synthesizes the morning/live briefing in-memory using latest live data."""
-        if not self.quote_data:
-            self.quote_data = get_quote_of_the_day()
-        if not self.calendar_data:
-            self.calendar_data = get_calendar_events()
+        self.quote_data = get_quote_of_the_day()
+        self.calendar_data = get_calendar_events()
         self.newspaper_digest = get_morning_newspaper()
 
         top_bc = self.bosscoder_data[0] if self.bosscoder_data else None

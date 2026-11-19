@@ -121,7 +121,7 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
         briefing: briefing.status === "fulfilled" ? briefing.value : null,
         bookmarks: bookmarks.status === "fulfilled" ? bookmarks.value : [],
         timelineSegments:
-          timeline.status === "fulfilled" && timeline.value.length > 0
+          timeline.status === "fulfilled"
             ? timeline.value
             : get().timelineSegments,
         liveTab: liveTab.status === "fulfilled" ? liveTab.value : null,
@@ -198,7 +198,7 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   refreshTimeline: async () => {
     try {
       const timelineSegments = await daypilotApi.getTimeline();
-      if (Array.isArray(timelineSegments) && timelineSegments.length > 0) {
+      if (Array.isArray(timelineSegments)) {
         set({ timelineSegments });
       }
     } catch (e) {}
@@ -246,8 +246,9 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
     }
 
     if (type === "MODE_CHANGE" || type === "INITIAL_STATE") {
-      if (data && data.mode) {
-        get().setMode(data.mode as FlightMode);
+      if (data) {
+        if (data.mode) get().setMode(data.mode as FlightMode);
+        if (data.override) get().setOverride(data.override as OverrideMode);
       }
     } else if (type === "TELEMETRY_SYNCED") {
       get().refreshBriefing();
@@ -255,6 +256,12 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
       get().refreshTimeline();
       get().refreshLiveTab();
       get().refreshNightlyBriefing();
+    } else if (type === "LIVE_TAB_UPDATED" || type === "HEARTBEAT_UPDATED") {
+      if (data) {
+        set({ liveTab: data });
+      } else {
+        get().refreshLiveTab();
+      }
     } else if (
       type === "GITHUB_UPDATED" ||
       type === "BOSSCODER_UPDATED" ||

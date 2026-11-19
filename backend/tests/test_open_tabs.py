@@ -10,13 +10,13 @@ H = {"X-DayPilot-Token": DAYPILOT_API_TOKEN}
 
 
 def _reset():
-    app_module._open_tabs.update(tabs=[], updated_at=0.0)
+    app_module._open_tabs.update(tabs=[], updated_at=0.0, paused=False)
 
 
 def test_open_tabs_empty_until_browser_reports():
     _reset()
     data = client.get("/api/tabs/open").json()
-    assert data == {"connected": False, "tabs": [], "updated_at": 0.0}
+    assert data == {"connected": False, "tabs": [], "updated_at": 0.0, "paused": False}
 
 
 def test_report_requires_token():

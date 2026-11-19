@@ -39,30 +39,15 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [showCenterTimer, setShowCenterTimer] = useState<boolean>(false);
 
-  // Live satellite data from backend
-  const [bosscoderItem, setBosscoderItem] = useState<{ title: string; subtitle: string; url: string }>({
-    title: "DSA // QUICK SORT",
-    subtitle: "Tutorial 11 with Ankur Raj",
-    url: "https://school.bosscoderacademy.com/home"
-  });
-
-  const [githubItem, setGithubItem] = useState<{ title: string; subtitle: string; url: string }>({
-    title: "PR REVIEW // SHARDING",
-    subtitle: "apache/shardingsphere #40449",
-    url: "https://github.com/apache/shardingsphere/pull/40449"
-  });
-
+  // Live satellite data from backend (null when empty/offline)
+  const [bosscoderItem, setBosscoderItem] = useState<{ title: string; subtitle: string; url: string } | null>(null);
+  const [githubItem, setGithubItem] = useState<{ title: string; subtitle: string; url: string } | null>(null);
   const [mediaItem, setMediaItem] = useState<{
     type?: string;
     title: string;
     subtitle: string;
     url: string;
-  }>({
-    type: "MANHWA",
-    title: "RESUME // MANHWA",
-    subtitle: "Solo Leveling: Ragnarok (Chapter 37)",
-    url: "https://flamecomics.me/series/solo-leveling-ragnarok/chapter-37"
-  });
+  } | null>(null);
 
   // Derive live satellite targets from cached store (invalidated by WebSocket events)
   useEffect(() => {
@@ -71,9 +56,11 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
         const b = briefing.bosscoder_alerts[0];
         setBosscoderItem({
           title: "DSA // BOSSCODER",
-          subtitle: b.title || "DSA Tutorial 11",
+          subtitle: b.title || "DSA Curriculum",
           url: b.url || "https://school.bosscoderacademy.com/home"
         });
+      } else {
+        setBosscoderItem(null);
       }
       const prs = briefing.github_notifications || briefing.github_prs;
       if (prs && prs.length > 0) {
@@ -81,8 +68,10 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
         setGithubItem({
           title: "GITHUB // PR REVIEW",
           subtitle: `${g.repo || g.title || "PR"} ${g.pr || g.number || ""}`,
-          url: g.url || "https://github.com/Srijanhub/DayPilot"
+          url: g.url || "https://github.com/notifications"
         });
+      } else {
+        setGithubItem(null);
       }
     }
 
@@ -96,10 +85,12 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
         subtitle: `${m.title} (${m.current_unit}${timeStr})`,
         url: m.resume_url || ""
       });
+    } else {
+      setMediaItem(null);
     }
   }, [briefing, bookmarks]);
 
-  // Web Audio chime generator
+  // Web Audio chime generator with automatic cleanup to prevent context leaks
   const playChime = (freq = 440, type: OscillatorType = "sine") => {
     if (!soundEnabled || typeof window === "undefined") return;
     try {
@@ -115,23 +106,28 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 1.2);
+      setTimeout(() => { ctx.close().catch(() => {}); }, 1500);
     } catch (e) {}
   };
 
   // Timer countdown loop
   useEffect(() => {
     let timer: any = null;
-    if (isActive && timeLeft > 0) {
+    if (isActive) {
       timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setIsActive(false);
+            playChime(880, "triangle");
+            if (onBreathingChange) onBreathingChange(false);
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
-    } else if (timeLeft === 0 && isActive) {
-      setIsActive(false);
-      playChime(880, "triangle");
-      if (onBreathingChange) onBreathingChange(false);
     }
     return () => clearInterval(timer);
-  }, [isActive, timeLeft]);
+  }, [isActive]);
 
   // Box-Breathing pacer loop (4s Inhale, 4s Hold, 4s Exhale, 4s Hold)
   useEffect(() => {
@@ -180,10 +176,7 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
 
   const openUrl = (url: string) => {
     if (!url) return;
-    try {
-      window.open(url, "_blank");
-    } catch (e) {}
-    daypilotApi.openUrl(url).catch(() => {});
+    daypilotApi.openUrl(url).catch(() => window.open(url, "_blank"));
   };
 
   const formatTime = (secs: number) => {
@@ -216,24 +209,25 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
           
           {/* Circular SVG Progress Meter */}
           {isActive && (
-            <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none">
+            <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none">
               <circle
-                cx="50%"
-                cy="50%"
-                r="46%"
+                cx="50"
+                cy="50"
+                r="45"
                 fill="none"
                 stroke="oklch(1 0 0 / 0.1)"
                 strokeWidth="2.5"
               />
               <circle
-                cx="50%"
-                cy="50%"
-                r="46%"
+                cx="50"
+                cy="50"
+                r="45"
                 fill="none"
                 stroke="var(--accent-primary)"
                 strokeWidth="2.5"
-                strokeDasharray="290"
-                strokeDashoffset={290 - (290 * progressPercent) / 100}
+                pathLength={100}
+                strokeDasharray="100"
+                strokeDashoffset={100 - progressPercent}
                 strokeLinecap="round"
                 className="transition-all duration-1000"
               />
@@ -345,79 +339,85 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
       </div>
 
       {/* Satellite 2: RIGHT (3 o'clock) -> BossCoder Next Class */}
-      <div
-        onClick={() => openUrl(bosscoderItem.url)}
-        className="pointer-events-auto absolute right-6 sm:right-12 md:right-20 flex items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
-      >
-        {/* Laser Connector Line pointing left */}
-        <div className="w-5 h-[1px] bg-gradient-to-r from-transparent to-[#10b981] opacity-40 group-hover:opacity-100 transition" />
-        <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#10b981] flex items-center space-x-2.5 shadow-lg">
-          <div className="w-6 h-6 rounded-lg bg-[#10b981]/15 flex items-center justify-center shrink-0">
-            <GraduationCap className="w-3.5 h-3.5 text-[#10b981]" />
-          </div>
-          <div>
-            <div className="text-[10px] font-mono tracking-widest text-[#10b981] uppercase font-bold flex items-center space-x-1">
-              <span>{bosscoderItem.title}</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+      {bosscoderItem && (
+        <div
+          onClick={() => openUrl(bosscoderItem.url)}
+          className="pointer-events-auto absolute right-6 sm:right-12 md:right-20 flex items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
+        >
+          {/* Laser Connector Line pointing left */}
+          <div className="w-5 h-[1px] bg-gradient-to-r from-transparent to-[#10b981] opacity-40 group-hover:opacity-100 transition" />
+          <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#10b981] flex items-center space-x-2.5 shadow-lg">
+            <div className="w-6 h-6 rounded-lg bg-[#10b981]/15 flex items-center justify-center shrink-0">
+              <GraduationCap className="w-3.5 h-3.5 text-[#10b981]" />
             </div>
-            <div className="text-xs font-semibold text-white truncate max-w-[150px]">
-              {bosscoderItem.subtitle}
+            <div>
+              <div className="text-[10px] font-mono tracking-widest text-[#10b981] uppercase font-bold flex items-center space-x-1">
+                <span>{bosscoderItem.title}</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+              </div>
+              <div className="text-xs font-semibold text-white truncate max-w-[150px]">
+                {bosscoderItem.subtitle}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Satellite 3: BOTTOM (6 o'clock) -> Media Radar (Show / Anime / Manhwa) */}
-      <div
-        onClick={() => openUrl(mediaItem.url)}
-        className="pointer-events-auto absolute bottom-8 sm:bottom-10 flex flex-col items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
-      >
-        {/* Laser Connector Line pointing up */}
-        <div className="w-[1px] h-5 bg-gradient-to-t from-[#f59e0b] to-transparent opacity-40 group-hover:opacity-100 transition" />
-        <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#f59e0b] flex items-center space-x-2.5 shadow-lg">
-          <div className="w-6 h-6 rounded-lg bg-[#f59e0b]/15 flex items-center justify-center shrink-0">
-            {mediaItem.type === "MANHWA" || mediaItem.type === "MANGA" ? (
-              <BookOpen className="w-3.5 h-3.5 text-[#f59e0b]" />
-            ) : mediaItem.type === "ANIME" ? (
-              <Film className="w-3.5 h-3.5 text-[#f59e0b]" />
-            ) : (
-              <Tv className="w-3.5 h-3.5 text-[#f59e0b]" />
-            )}
-          </div>
-          <div>
-            <div className="text-[10px] font-mono tracking-widest text-[#f59e0b] uppercase font-bold flex items-center space-x-1">
-              <span>{mediaItem.title}</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+      {mediaItem && (
+        <div
+          onClick={() => openUrl(mediaItem.url)}
+          className="pointer-events-auto absolute bottom-8 sm:bottom-10 flex flex-col items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
+        >
+          {/* Laser Connector Line pointing up */}
+          <div className="w-[1px] h-5 bg-gradient-to-t from-[#f59e0b] to-transparent opacity-40 group-hover:opacity-100 transition" />
+          <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[#f59e0b] flex items-center space-x-2.5 shadow-lg">
+            <div className="w-6 h-6 rounded-lg bg-[#f59e0b]/15 flex items-center justify-center shrink-0">
+              {mediaItem.type === "MANHWA" || mediaItem.type === "MANGA" ? (
+                <BookOpen className="w-3.5 h-3.5 text-[#f59e0b]" />
+              ) : mediaItem.type === "ANIME" ? (
+                <Film className="w-3.5 h-3.5 text-[#f59e0b]" />
+              ) : (
+                <Tv className="w-3.5 h-3.5 text-[#f59e0b]" />
+              )}
             </div>
-            <div className="text-xs font-semibold text-white truncate max-w-[180px] sm:max-w-[240px]">
-              {mediaItem.subtitle}
+            <div>
+              <div className="text-[10px] font-mono tracking-widest text-[#f59e0b] uppercase font-bold flex items-center space-x-1">
+                <span>{mediaItem.title}</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+              </div>
+              <div className="text-xs font-semibold text-white truncate max-w-[180px] sm:max-w-[240px]">
+                {mediaItem.subtitle}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Satellite 4: LEFT (9 o'clock) -> GitHub Open PR Review */}
-      <div
-        onClick={() => openUrl(githubItem.url)}
-        className="pointer-events-auto absolute left-6 sm:left-12 md:left-20 flex items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
-      >
-        <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[var(--accent-primary)] flex items-center space-x-2.5 shadow-lg">
-          <div className="w-6 h-6 rounded-lg bg-[var(--accent-primary)]/15 flex items-center justify-center shrink-0">
-            <GitPullRequest className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-          </div>
-          <div>
-            <div className="text-[10px] font-mono tracking-widest text-[var(--accent-primary)] uppercase font-bold flex items-center space-x-1">
-              <span>{githubItem.title}</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+      {githubItem && (
+        <div
+          onClick={() => openUrl(githubItem.url)}
+          className="pointer-events-auto absolute left-6 sm:left-12 md:left-20 flex items-center group cursor-pointer transition-all duration-300 hover:scale-105 z-20"
+        >
+          <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)]/90 backdrop-blur-md border border-[var(--border-hairline)] group-hover:border-[var(--accent-primary)] flex items-center space-x-2.5 shadow-lg">
+            <div className="w-6 h-6 rounded-lg bg-[var(--accent-primary)]/15 flex items-center justify-center shrink-0">
+              <GitPullRequest className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
             </div>
-            <div className="text-xs font-semibold text-white truncate max-w-[150px]">
-              {githubItem.subtitle}
+            <div>
+              <div className="text-[10px] font-mono tracking-widest text-[var(--accent-primary)] uppercase font-bold flex items-center space-x-1">
+                <span>{githubItem.title}</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition" />
+              </div>
+              <div className="text-xs font-semibold text-white truncate max-w-[150px]">
+                {githubItem.subtitle}
+              </div>
             </div>
           </div>
+          {/* Laser Connector Line pointing right */}
+          <div className="w-5 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-primary)] opacity-40 group-hover:opacity-100 transition" />
         </div>
-        {/* Laser Connector Line pointing right */}
-        <div className="w-5 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-primary)] opacity-40 group-hover:opacity-100 transition" />
-      </div>
+      )}
     </div>
   );
 }

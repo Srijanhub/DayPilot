@@ -9,18 +9,65 @@ const OPEN_TABS_ENDPOINT = "http://127.0.0.1:4000/api/tabs/open";
 const ALARM_NAME = "daypilot_flush_alarm";
 const FLUSH_INTERVAL_MINUTES = 0.1; // ~6 seconds
 
-// Initialize alarms
-chrome.runtime.onInstalled.addListener(() => {
+// Initialize alarms & configuration defensively on install and on startup
+async function initExtension(details) {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: FLUSH_INTERVAL_MINUTES });
-  chrome.storage.local.set({
-    tracking_paused: false,
-    excluded_domains: ["bank", "chase.com", "paypal.com", "wellsfargo.com", "accounts.google.com"],
-    pending_heartbeats: []
-  });
-});
+  const storage = await chrome.storage.local.get(["tracking_paused", "excluded_domains"]);
+  if (storage.tracking_paused === undefined) {
+    await chrome.storage.local.set({ tracking_paused: false });
+  }
+  if (!storage.excluded_domains) {
+    await chrome.storage.local.set({
+      excluded_domains: ["bank", "chase.com", "paypal.com", "wellsfargo.com", "accounts.google.com"]
+    });
+  }
+}
+
+chrome.runtime.onInstalled.addListener(initExtension);
+chrome.runtime.onStartup.addListener(initExtension);
+
+// Real-time WebSocket connection to DayPilot backend for tab activation
+let ws = null;
+function connectWebSocket() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  try {
+    ws = new WebSocket("ws://127.0.0.1:4000/ws/state");
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "ACTIVATE_TAB" && msg.data) {
+          handleActivateTab(msg.data);
+        }
+      } catch (e) {}
+    };
+    ws.onclose = () => { ws = null; };
+    ws.onerror = () => { ws = null; };
+  } catch (e) {
+    ws = null;
+  }
+}
+
+function handleActivateTab(data) {
+  if (data && data.tab_id) {
+    chrome.tabs.update(data.tab_id, { active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        if (data.url) chrome.tabs.create({ url: data.url });
+        return;
+      }
+      const winId = data.window_id || tab.windowId;
+      if (winId) {
+        chrome.windows.update(winId, { focused: true });
+      }
+    });
+  }
+}
+
+// Ensure WebSocket is active
+connectWebSocket();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
+    connectWebSocket();
     reportOpenTabs();
     collectAndFlush();
   }
@@ -42,14 +89,15 @@ async function recordMediaEvent(tab, mediaPayload) {
   if (storage.tracking_paused) return;
 
   const url = new URL(tab.url || "http://unknown");
-  if (storage.excluded_domains.some(d => url.hostname.includes(d))) return;
+  const excluded = storage.excluded_domains || [];
+  if (excluded.some(d => url.hostname.includes(d))) return;
 
   const heartbeat = {
     app_name: "Opera GX",
     window_title: tab.title || "",
     domain: url.hostname,
     url: mediaPayload.resume_url || tab.url,
-    duration_seconds: 5,
+    duration_seconds: 0, // Bookmarking only: do not double-count active screen duration
     idle_seconds: 0,
     media_type: mediaPayload.media_type,
     series_title: mediaPayload.series_title,
@@ -57,7 +105,7 @@ async function recordMediaEvent(tab, mediaPayload) {
     timestamp_offset: mediaPayload.timestamp_offset
   };
 
-  sendToBackend(heartbeat);
+  await sendToBackend(heartbeat);
 }
 
 async function collectAndFlush() {
@@ -77,8 +125,8 @@ async function collectAndFlush() {
 
       try {
         const url = new URL(activeTab.url);
-        // Excluded domains
-        if (storage.excluded_domains.some(d => url.hostname.includes(d))) return;
+        const excluded = storage.excluded_domains || [];
+        if (excluded.some(d => url.hostname.includes(d))) return;
 
         const heartbeat = {
           app_name: "Opera GX",
@@ -89,7 +137,7 @@ async function collectAndFlush() {
           idle_seconds: isIdle ? 65 : 0
         };
 
-        sendToBackend(heartbeat);
+        await sendToBackend(heartbeat);
       } catch (err) {
         // Invalid URL or internal chrome page (chrome://)
       }
@@ -138,19 +186,28 @@ async function getApiToken() {
   return "";
 }
 
-async function sendToBackend(payload, endpoint = API_ENDPOINT) {
-  const token = await getApiToken();
+async function sendToBackend(payload, endpoint = API_ENDPOINT, isRetry = false) {
+  let token = await getApiToken();
 
-  fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-DayPilot-Token": token
-    },
-    body: JSON.stringify(payload)
-  }).catch(() => {
-    // Backend offline, fail silently
-  });
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-DayPilot-Token": token
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.status === 401 && !isRetry) {
+      inMemoryToken = "";
+      await chrome.storage.local.remove(["daypilot_api_token"]);
+      return await sendToBackend(payload, endpoint, true);
+    }
+    return res;
+  } catch (e) {
+    return null;
+  }
 }
 
 
@@ -167,33 +224,35 @@ function scheduleOpenTabsReport() {
 
 async function reportOpenTabs() {
   const storage = await chrome.storage.local.get(["tracking_paused", "excluded_domains"]);
+  if (storage.tracking_paused) {
+    return await sendToBackend({ tabs: [], paused: true }, OPEN_TABS_ENDPOINT);
+  }
+
   const excluded = storage.excluded_domains || [];
   let tabs = [];
 
-  if (!storage.tracking_paused) {
-    const [all, win] = await Promise.all([
-      chrome.tabs.query({}),
-      chrome.windows.getLastFocused().catch(() => null)
-    ]);
-    const windowFocused = Boolean(win && win.focused);
+  const [all, win] = await Promise.all([
+    chrome.tabs.query({}),
+    chrome.windows.getLastFocused().catch(() => null)
+  ]);
+  const windowFocused = Boolean(win && win.focused);
 
-    tabs = all
-      .filter((t) => t.url && !t.incognito && /^https?:/i.test(t.url))
-      .filter((t) => {
-        try { return !excluded.some((d) => new URL(t.url).hostname.includes(d)); }
-        catch (e) { return false; }
-      })
-      .map((t) => ({
-        id: t.id,
-        window_id: t.windowId,
-        title: t.title || "",
-        url: t.url,
-        active: Boolean(t.active),
-        focused: Boolean(t.active && windowFocused && win && t.windowId === win.id)
-      }));
-  }
+  tabs = all
+    .filter((t) => t.url && !t.incognito && /^https?:/i.test(t.url))
+    .filter((t) => {
+      try { return !excluded.some((d) => new URL(t.url).hostname.includes(d)); }
+      catch (e) { return false; }
+    })
+    .map((t) => ({
+      id: t.id,
+      window_id: t.windowId,
+      title: t.title || "",
+      url: t.url,
+      active: Boolean(t.active),
+      focused: Boolean(t.active && windowFocused && win && t.windowId === win.id)
+    }));
 
-  sendToBackend({ tabs }, OPEN_TABS_ENDPOINT);
+  await sendToBackend({ tabs, paused: false }, OPEN_TABS_ENDPOINT);
 }
 
 chrome.tabs.onCreated.addListener(scheduleOpenTabsReport);

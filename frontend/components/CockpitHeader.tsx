@@ -8,6 +8,7 @@ import { daypilotApi } from "@/lib/api";
 export default function CockpitHeader() {
   const { mode, override, triggerPhaseShift, setOverride, setCommandPaletteOpen } = useFlightDeckStore();
   const [timeStr, setTimeStr] = useState<string>("");
+  const [tzStr, setTzStr] = useState<string>("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState("ALL CONNECTED");
 
@@ -22,7 +23,6 @@ export default function CockpitHeader() {
     } finally {
       setTimeout(() => {
         setIsSyncing(false);
-        setSyncStatus("ALL SYNCED");
       }, 800);
     }
   };
@@ -31,6 +31,11 @@ export default function CockpitHeader() {
     const update = () => {
       const now = new Date();
       setTimeStr(now.toLocaleTimeString("en-US", { hour12: false }));
+      const offset = now.getTimezoneOffset();
+      const sign = offset <= 0 ? "+" : "-";
+      const hours = Math.abs(Math.floor(offset / 60));
+      const mins = (Math.abs(offset % 60)).toString().padStart(2, "0");
+      setTzStr(`UTC${sign}${hours}:${mins}`);
     };
     update();
     const interval = setInterval(update, 1000);
@@ -112,7 +117,7 @@ export default function CockpitHeader() {
         {/* Right: Clock & Command Palette Trigger */}
         <div className="flex items-center space-x-4">
           <div className="font-mono text-sm text-[var(--text-primary)] tracking-wider">
-            <span className="text-[var(--text-muted)] mr-1.5">UTC+5:30</span>
+            {tzStr && <span className="text-[var(--text-muted)] mr-1.5">{tzStr}</span>}
             <span className="font-bold text-[var(--accent-primary)]">{timeStr || "09:00:00"}</span>
           </div>
 

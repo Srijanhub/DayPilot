@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { useFlightDeckStore, FlightMode } from "@/store/useFlightDeckStore";
+import { daypilotApi } from "@/lib/api";
 import { Command, Search, Zap, BookOpen, Music, Mic, CheckCircle, X } from "lucide-react";
 
 export default function CommandPalette() {
-  const { isCommandPaletteOpen, setCommandPaletteOpen, triggerPhaseShift, setOverride } = useFlightDeckStore();
+  const { isCommandPaletteOpen, setCommandPaletteOpen, triggerPhaseShift, setOverride, bookmarks } = useFlightDeckStore();
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -25,14 +26,56 @@ export default function CommandPalette() {
   if (!isCommandPaletteOpen) return null;
 
   const actions = [
-    { id: "mode_work", title: "Switch to WORK Mode", category: "Mode", icon: Zap, action: () => { setOverride("FORCE_WORK"); triggerPhaseShift("WORK"); } },
-    { id: "mode_study", title: "Switch to STUDY Mode", category: "Mode", icon: Zap, action: () => { setOverride("FORCE_STUDY"); triggerPhaseShift("STUDY"); } },
-    { id: "mode_relax", title: "Switch to RELAX Mode", category: "Mode", icon: Zap, action: () => { setOverride("FORCE_RELAX"); triggerPhaseShift("RELAX"); } },
-    { id: "mode_auto", title: "Enable AUTO-DETECT Context", category: "Mode", icon: Zap, action: () => setOverride("AUTO") },
-    { id: "resume_manhwa", title: "Resume: The Greatest Estate Developer (Ch 148)", category: "Media", icon: BookOpen, action: () => window.open("https://asuracomic.net", "_blank") },
-    { id: "resume_show", title: "Resume: Arcane Season 2 (Episode 4)", category: "Media", icon: BookOpen, action: () => window.open("https://netflix.com", "_blank") },
-    { id: "music_toggle", title: "Toggle YouTube Music (Play/Pause)", category: "Music", icon: Music, action: () => {} },
-    { id: "record_memo", title: "Record Voice Memo Quick-Dump", category: "Audio", icon: Mic, action: () => {} },
+    {
+      id: "mode_work",
+      title: "Switch to WORK Mode",
+      category: "Mode",
+      icon: Zap,
+      action: () => {
+        setOverride("FORCE_WORK");
+        triggerPhaseShift("WORK");
+        daypilotApi.setOverride("FORCE_WORK").catch(() => {});
+      }
+    },
+    {
+      id: "mode_study",
+      title: "Switch to STUDY Mode",
+      category: "Mode",
+      icon: Zap,
+      action: () => {
+        setOverride("FORCE_STUDY");
+        triggerPhaseShift("STUDY");
+        daypilotApi.setOverride("FORCE_STUDY").catch(() => {});
+      }
+    },
+    {
+      id: "mode_relax",
+      title: "Switch to RELAX Mode",
+      category: "Mode",
+      icon: Zap,
+      action: () => {
+        setOverride("FORCE_RELAX");
+        triggerPhaseShift("RELAX");
+        daypilotApi.setOverride("FORCE_RELAX").catch(() => {});
+      }
+    },
+    {
+      id: "mode_auto",
+      title: "Enable AUTO-DETECT Context",
+      category: "Mode",
+      icon: Zap,
+      action: () => {
+        setOverride("AUTO");
+        daypilotApi.setOverride("AUTO").catch(() => {});
+      }
+    },
+    ...(bookmarks || []).slice(0, 3).map((b) => ({
+      id: `resume_${b.id}`,
+      title: `Resume: ${b.title} (${b.current_unit})`,
+      category: "Media",
+      icon: BookOpen,
+      action: () => daypilotApi.openUrl(b.resume_url).catch(() => window.open(b.resume_url, "_blank"))
+    }))
   ];
 
   const filtered = actions.filter(a => a.title.toLowerCase().includes(query.toLowerCase()) || a.category.toLowerCase().includes(query.toLowerCase()));

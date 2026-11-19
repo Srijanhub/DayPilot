@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Compass,
   Globe,
@@ -24,16 +24,20 @@ export default function ActiveTabMonitorPanel() {
   const [filter, setFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const hasDefaultedRef = useRef(false);
 
   // Load live tab and history state on mount
   useEffect(() => {
     refreshLiveTab();
   }, [refreshLiveTab]);
 
-  // If browser is not reporting open tabs, default to recent active Opera GX tabs
+  // Default to recent Opera GX tabs only once on initial mount if browser extension is not reporting
   useEffect(() => {
-    if (!browserConnected && openTabs.length === 0 && tabHistory.length > 0) {
+    if (!hasDefaultedRef.current && !browserConnected && openTabs.length === 0 && tabHistory.length > 0) {
       setViewMode("RECENT");
+      hasDefaultedRef.current = true;
+    } else if (openTabs.length > 0) {
+      hasDefaultedRef.current = true;
     }
   }, [browserConnected, openTabs.length, tabHistory.length]);
 
@@ -53,6 +57,18 @@ export default function ActiveTabMonitorPanel() {
     } catch {
       window.open(url, "_blank");
     }
+  };
+
+  const handleItemClick = async (item: any) => {
+    if ("id" in item && typeof item.id === "number") {
+      try {
+        await daypilotApi.activateTab(item.id, item.window_id, item.url);
+        return;
+      } catch {
+        // Fall back to opening URL
+      }
+    }
+    handleOpenUrl(item.url);
   };
 
   // Currently focused tab in the browser (if extension is reporting)
@@ -159,7 +175,12 @@ export default function ActiveTabMonitorPanel() {
               <h3 className="text-sm font-bold text-white truncate">{liveTab.window_title}</h3>
               <div className="flex items-center space-x-2 text-xs text-[var(--text-muted)] font-mono">
                 <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                <span>Active Dwell: {Math.round((liveTab.dwell_seconds || 5) / 60)}m</span>
+                <span>
+                  Active Dwell:{" "}
+                  {(liveTab.dwell_seconds || 5) < 60
+                    ? `${liveTab.dwell_seconds || 5}s`
+                    : `${Math.floor((liveTab.dwell_seconds || 5) / 60)}m ${(liveTab.dwell_seconds || 5) % 60}s`}
+                </span>
                 {liveTab.domain && liveTab.domain !== "desktop" && (
                   <>
                     <span>•</span>
@@ -280,7 +301,7 @@ export default function ActiveTabMonitorPanel() {
                         href={item.url}
                         onClick={(e) => {
                           e.preventDefault();
-                          handleOpenUrl(item.url);
+                          handleItemClick(item);
                         }}
                         className="font-semibold text-white hover:text-[var(--accent-primary)] truncate text-xs transition"
                         title={item.title}
@@ -309,9 +330,9 @@ export default function ActiveTabMonitorPanel() {
                       {item.category || "WORK"}
                     </span>
                     <button
-                      onClick={() => handleOpenUrl(item.url)}
+                      onClick={() => handleItemClick(item)}
                       className="p-1.5 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)] hover:border-[var(--border-active)] text-slate-400 hover:text-white transition opacity-70 group-hover:opacity-100"
-                      title="Open in Opera GX"
+                      title="Switch to or open tab in Opera GX"
                     >
                       <ExternalLink className="w-3 h-3" />
                     </button>

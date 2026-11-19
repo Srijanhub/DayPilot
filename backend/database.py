@@ -134,9 +134,20 @@ def init_db():
 
 
 def get_today_range():
-    """Returns (start_str, end_str) timestamps for today to enable index-backed sargable range queries."""
-    today = datetime.now().strftime("%Y-%m-%d")
-    return f"{today} 00:00:00", f"{today} 23:59:59"
+    """
+    Returns (start_str, end_str) UTC timestamps covering today's full 24-hour window
+    in the system's local timezone. Enables index-backed sargable range queries
+    against UTC-stamped activity events without timezone mismatch.
+    """
+    local_now = datetime.now().astimezone()
+    today = local_now.date()
+    local_start = datetime.combine(today, datetime.min.time(), tzinfo=local_now.tzinfo)
+    local_end = datetime.combine(today, datetime.max.time(), tzinfo=local_now.tzinfo)
+    
+    from datetime import timezone
+    utc_start = local_start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    utc_end = local_end.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return utc_start, utc_end
 
 
 def upsert_bookmark(
