@@ -110,7 +110,7 @@ export default function BossCoderGitHubPanel() {
         ) : (
           <div className="space-y-2">
             {githubPrs.map((g, idx) => {
-              const targetUrl = g.url || (g.pr ? `https://github.com/daypilot/pull/${g.pr.replace('#', '')}` : "https://github.com/notifications");
+              const targetUrl = g.url || (g.repo && g.pr ? `https://github.com/${g.repo}/pull/${g.pr.replace('#', '')}` : "https://github.com/notifications");
 
               return (
                 <a

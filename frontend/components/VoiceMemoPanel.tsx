@@ -18,13 +18,7 @@ export default function VoiceMemoPanel() {
   const [liveTranscript, setLiveTranscript] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<string>("prompt");
-  const [memos, setMemos] = useState<VoiceMemo[]>([
-    {
-      time: "08:45 AM",
-      text: "Review BossCoder Dynamic Programming Lab 4 edge cases and check active GitHub PR comments.",
-      action: "Review DP Lab 4 edge cases"
-    }
-  ]);
+  const [memos, setMemos] = useState<VoiceMemo[]>([]);
 
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -300,19 +294,25 @@ export default function VoiceMemoPanel() {
         <div className="instrument-label text-xs text-[var(--text-muted)]">
           RECENT AUDIO THOUGHTS & EXTRACTED ACTIONS ({memos.length})
         </div>
-        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-          {memos.map((m, idx) => (
-            <div key={idx} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-xs space-y-1 hover:border-[var(--border-active)] transition">
-              <div className="flex items-center justify-between text-xs font-mono text-[var(--accent-primary)] font-semibold">
-                <span>ACTION: {m.action}</span>
-                <span className="text-[var(--text-muted)] font-normal">{m.time}</span>
+        {memos.length === 0 ? (
+          <div className="p-3.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-center font-mono text-xs text-[var(--text-muted)]">
+            NO AUDIO MEMOS RECORDED YET // TAP MIC TO RECORD
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {memos.map((m, idx) => (
+              <div key={idx} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-xs space-y-1 hover:border-[var(--border-active)] transition">
+                <div className="flex items-center justify-between text-xs font-mono text-[var(--accent-primary)] font-semibold">
+                  <span>ACTION: {m.action}</span>
+                  <span className="text-[var(--text-muted)] font-normal">{m.time}</span>
+                </div>
+                <p className="text-slate-300 text-xs leading-relaxed">
+                  "{m.text}"
+                </p>
               </div>
-              <p className="text-slate-300 text-xs leading-relaxed">
-                "{m.text}"
-              </p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

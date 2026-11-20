@@ -5,6 +5,13 @@ Fails gracefully with structured data if offline or not logged in.
 """
 
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+if _ENV_PATH.exists():
+    load_dotenv(_ENV_PATH)
+
 import subprocess
 import json
 import urllib.request

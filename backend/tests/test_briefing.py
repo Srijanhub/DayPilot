@@ -10,6 +10,7 @@ def test_morning_briefing_schema(monkeypatch):
     sample = [{"headline": f"Story {i}", "topic": "TECH", "source": "Test", "url": f"https://example.com/{i}"} for i in range(3)]
     monkeypatch.setattr("collectors.briefing_engine.get_morning_newspaper", lambda *a, **k: sample)
     monkeypatch.setattr("collectors.briefing_engine.get_bosscoder_alerts", lambda *a, **k: [{"id": "bc_1", "title": "Dynamic Programming", "urgency": "HIGH"}])
+    monkeypatch.setattr("collectors.briefing_engine.get_calendar_events", lambda *a, **k: [{"id": "cal_1", "title": "Team Sync", "time": "10:00 AM"}])
     briefing = synthesize_morning_briefing()
     assert isinstance(briefing, MorningBriefingSchema)
     assert len(briefing.morning_quote) > 0
