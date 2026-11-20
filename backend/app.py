@@ -345,7 +345,7 @@ YOUR INSTRUCTIONS:
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if gemini_key:
         try:
-            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={gemini_key}"
             
             contents = []
             for h in (req.history or []):
@@ -358,7 +358,7 @@ YOUR INSTRUCTIONS:
                 "contents": contents
             }
 
-            async with httpx.AsyncClient(timeout=12.0) as client:
+            async with httpx.AsyncClient(timeout=20.0) as client:
                 resp = await client.post(
                     gemini_url,
                     json=payload,
@@ -371,7 +371,7 @@ YOUR INSTRUCTIONS:
                         "reply": reply_text,
                         "mode": current_mode,
                         "active_tab": active_tab.get("window_title", ""),
-                        "source": "GEMINI_2.0_FLASH"
+                        "source": "GEMINI_3.8_FLASH"
                     }
         except Exception:
             # Fallback if Gemini request times out or key error
