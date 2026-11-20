@@ -203,9 +203,6 @@ export default function FlightDeckOrb({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(renderer.domElement);
 
-    // Initial telemetry announcement
-    telemetryCallbackRef.current?.({ fps: 60, dpr });
-
     // Detect accessibility preference
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 

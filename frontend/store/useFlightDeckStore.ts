@@ -117,20 +117,20 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
           daypilotApi.getTabHistory()
         ]);
 
-      set({
-        briefing: briefing.status === "fulfilled" ? briefing.value : null,
-        bookmarks: bookmarks.status === "fulfilled" ? bookmarks.value : [],
+      set((state) => ({
+        briefing: briefing.status === "fulfilled" ? briefing.value : state.briefing,
+        bookmarks: bookmarks.status === "fulfilled" ? bookmarks.value : state.bookmarks,
         timelineSegments:
           timeline.status === "fulfilled"
             ? timeline.value
-            : get().timelineSegments,
-        liveTab: liveTab.status === "fulfilled" ? liveTab.value : null,
-        openTabs: openTabs.status === "fulfilled" ? openTabs.value.tabs : [],
-        browserConnected: openTabs.status === "fulfilled" ? openTabs.value.connected : false,
-        tabHistory: tabHistory.status === "fulfilled" ? tabHistory.value : [],
-        memos: memos.status === "fulfilled" ? memos.value : [],
-        nightlyBriefing: nightly.status === "fulfilled" ? nightly.value : null
-      });
+            : state.timelineSegments,
+        liveTab: liveTab.status === "fulfilled" ? liveTab.value : state.liveTab,
+        openTabs: openTabs.status === "fulfilled" ? openTabs.value.tabs : state.openTabs,
+        browserConnected: openTabs.status === "fulfilled" ? openTabs.value.connected : state.browserConnected,
+        tabHistory: tabHistory.status === "fulfilled" ? tabHistory.value : state.tabHistory,
+        memos: memos.status === "fulfilled" ? memos.value : state.memos,
+        nightlyBriefing: nightly.status === "fulfilled" ? nightly.value : state.nightlyBriefing
+      }));
     } catch (e) {
       // Backend offline or starting up
     }
@@ -161,29 +161,49 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   refreshBriefing: async () => {
     try {
       const briefing = await daypilotApi.getMorningBriefing();
-      set({ briefing });
+      set((state) => {
+        if (JSON.stringify(state.briefing) === JSON.stringify(briefing)) return {};
+        return { briefing };
+      });
     } catch (e) {}
   },
 
   refreshBookmarks: async () => {
     try {
       const bookmarks = await daypilotApi.getBookmarks();
-      set({ bookmarks });
+      set((state) => {
+        if (JSON.stringify(state.bookmarks) === JSON.stringify(bookmarks)) return {};
+        return { bookmarks };
+      });
     } catch (e) {}
   },
 
   refreshLiveTab: async () => {
     try {
-      const [liveTab, open, history] = await Promise.all([
+      const [liveTab, open, history] = await Promise.allSettled([
         daypilotApi.getLiveTab(),
         daypilotApi.getOpenTabs(),
         daypilotApi.getTabHistory()
       ]);
-      set({
-        liveTab,
-        openTabs: open.tabs,
-        browserConnected: open.connected,
-        tabHistory: history || []
+      const nextLive = liveTab.status === "fulfilled" ? liveTab.value : null;
+      const nextOpen = open.status === "fulfilled" ? open.value.tabs : [];
+      const nextConn = open.status === "fulfilled" ? open.value.connected : false;
+      const nextHist = history.status === "fulfilled" ? history.value : [];
+      set((state) => {
+        if (
+          JSON.stringify(state.liveTab) === JSON.stringify(nextLive) &&
+          JSON.stringify(state.openTabs) === JSON.stringify(nextOpen) &&
+          state.browserConnected === nextConn &&
+          JSON.stringify(state.tabHistory) === JSON.stringify(nextHist)
+        ) {
+          return {};
+        }
+        return {
+          liveTab: nextLive,
+          openTabs: nextOpen,
+          browserConnected: nextConn,
+          tabHistory: nextHist
+        };
       });
     } catch (e) {}
   },
@@ -191,7 +211,10 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   refreshTabHistory: async () => {
     try {
       const tabHistory = await daypilotApi.getTabHistory();
-      set({ tabHistory });
+      set((state) => {
+        if (JSON.stringify(state.tabHistory) === JSON.stringify(tabHistory)) return {};
+        return { tabHistory };
+      });
     } catch (e) {}
   },
 
@@ -199,7 +222,10 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
     try {
       const timelineSegments = await daypilotApi.getTimeline();
       if (Array.isArray(timelineSegments)) {
-        set({ timelineSegments });
+        set((state) => {
+          if (JSON.stringify(state.timelineSegments) === JSON.stringify(timelineSegments)) return {};
+          return { timelineSegments };
+        });
       }
     } catch (e) {}
   },
@@ -207,20 +233,30 @@ export const useFlightDeckStore = create<FlightDeckState>((set, get) => ({
   refreshMemos: async () => {
     try {
       const memos = await daypilotApi.getMemos();
-      set({ memos });
+      set((state) => {
+        if (JSON.stringify(state.memos) === JSON.stringify(memos)) return {};
+        return { memos };
+      });
     } catch (e) {}
   },
 
   refreshNightlyBriefing: async () => {
     try {
       const nightlyBriefing = await daypilotApi.getNightlyBriefing();
-      set({ nightlyBriefing });
+      set((state) => {
+        if (JSON.stringify(state.nightlyBriefing) === JSON.stringify(nightlyBriefing)) return {};
+        return { nightlyBriefing };
+      });
     } catch (e) {}
   },
 
   loadNews: async () => {
     try {
-      set({ news: await daypilotApi.getNews() });
+      const news = await daypilotApi.getNews();
+      set((state) => {
+        if (JSON.stringify(state.news) === JSON.stringify(news)) return {};
+        return { news };
+      });
     } catch (e) {}
   },
 

@@ -21,23 +21,19 @@ import { useFlightDeckStore } from "@/store/useFlightDeckStore";
 import { WS_BASE } from "@/lib/api";
 
 export default function FlightDeckPage() {
-  const {
-    mode,
-    audioEnergy,
-    isPhaseShifting,
-    timelineSegments,
-    loadInitialData,
-    handleWebSocketMessage
-  } = useFlightDeckStore();
+  const mode = useFlightDeckStore((s) => s.mode);
+  const audioEnergy = useFlightDeckStore((s) => s.audioEnergy);
+  const isPhaseShifting = useFlightDeckStore((s) => s.isPhaseShifting);
+  const timelineSegments = useFlightDeckStore((s) => s.timelineSegments);
 
   const [isBreathing, setIsBreathing] = useState(false);
   const [orbTelemetry, setOrbTelemetry] = useState({ fps: 60, dpr: 1.5 });
   const wsRef = useRef<WebSocket | null>(null);
 
-  // 1. Initial boot data fetch across all cached modules (single coordinated fetch)
+  // 1. Initial boot data fetch across all cached modules (single coordinated fetch on mount)
   useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    useFlightDeckStore.getState().loadInitialData();
+  }, []);
 
   // 2. Central WebSocket connection - invalidates Zustand cache on live events
   useEffect(() => {
@@ -52,7 +48,7 @@ export default function FlightDeckPage() {
         ws.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
-            handleWebSocketMessage(payload);
+            useFlightDeckStore.getState().handleWebSocketMessage(payload);
           } catch (err) {}
         };
 
@@ -81,7 +77,7 @@ export default function FlightDeckPage() {
         wsRef.current.close();
       }
     };
-  }, [handleWebSocketMessage]);
+  }, []);
 
   return (
     <main className="min-h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-primary)] relative select-none">

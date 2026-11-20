@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Play,
   Pause,
@@ -39,56 +39,44 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [showCenterTimer, setShowCenterTimer] = useState<boolean>(false);
 
-  // Live satellite data from backend (null when empty/offline)
-  const [bosscoderItem, setBosscoderItem] = useState<{ title: string; subtitle: string; url: string } | null>(null);
-  const [githubItem, setGithubItem] = useState<{ title: string; subtitle: string; url: string } | null>(null);
-  const [mediaItem, setMediaItem] = useState<{
-    type?: string;
-    title: string;
-    subtitle: string;
-    url: string;
-  } | null>(null);
+  // Pure derived live satellite data from cached store (zero cascading effects)
+  const bosscoderItem = useMemo(() => {
+    if (!briefing?.bosscoder_alerts || briefing.bosscoder_alerts.length === 0) return null;
+    const b = briefing.bosscoder_alerts[0];
+    if (!b) return null;
+    return {
+      title: "DSA // BOSSCODER",
+      subtitle: b.title || "DSA Curriculum",
+      url: b.url || "https://school.bosscoderacademy.com/home"
+    };
+  }, [briefing]);
 
-  // Derive live satellite targets from cached store (invalidated by WebSocket events)
-  useEffect(() => {
-    if (briefing) {
-      if (briefing.bosscoder_alerts && briefing.bosscoder_alerts.length > 0) {
-        const b = briefing.bosscoder_alerts[0];
-        setBosscoderItem({
-          title: "DSA // BOSSCODER",
-          subtitle: b.title || "DSA Curriculum",
-          url: b.url || "https://school.bosscoderacademy.com/home"
-        });
-      } else {
-        setBosscoderItem(null);
-      }
-      const prs = briefing.github_notifications || briefing.github_prs;
-      if (prs && prs.length > 0) {
-        const g = prs[0];
-        setGithubItem({
-          title: "GITHUB // PR REVIEW",
-          subtitle: `${g.repo || g.title || "PR"} ${g.pr || g.number || ""}`,
-          url: g.url || "https://github.com/notifications"
-        });
-      } else {
-        setGithubItem(null);
-      }
-    }
+  const githubItem = useMemo(() => {
+    if (!briefing) return null;
+    const prs = briefing.github_notifications || briefing.github_prs;
+    if (!prs || prs.length === 0) return null;
+    const g = prs[0];
+    if (!g) return null;
+    return {
+      title: "GITHUB // PR REVIEW",
+      subtitle: `${g.repo || g.title || "PR"} ${g.pr || g.number || ""}`.trim(),
+      url: g.url || "https://github.com/notifications"
+    };
+  }, [briefing]);
 
-    if (bookmarks && Array.isArray(bookmarks) && bookmarks.length > 0) {
-      const m = bookmarks[0];
-      const typeStr = m.media_type || "SHOW";
-      const timeStr = m.timestamp_offset ? ` • ${m.timestamp_offset}` : "";
-      setMediaItem({
-        type: typeStr,
-        title: `RESUME // ${typeStr}`,
-        subtitle: `${m.title} (${m.current_unit}${timeStr})`,
-        url: m.resume_url || ""
-      });
-    } else {
-      setMediaItem(null);
-    }
-  }, [briefing, bookmarks]);
+  const mediaItem = useMemo(() => {
+    if (!bookmarks || !Array.isArray(bookmarks) || bookmarks.length === 0) return null;
+    const m = bookmarks[0];
+    if (!m) return null;
+    const typeStr = m.media_type || "SHOW";
+    const timeStr = m.timestamp_offset ? ` • ${m.timestamp_offset}` : "";
+    return {
+      type: typeStr,
+      title: `RESUME // ${typeStr}`,
+      subtitle: `${m.title || "Media"} (${m.current_unit || "Active"}${timeStr})`,
+      url: m.resume_url || ""
+    };
+  }, [bookmarks]);
 
   // Web Audio chime generator with automatic cleanup to prevent context leaks
   const playChime = (freq = 440, type: OscillatorType = "sine") => {
@@ -127,34 +115,35 @@ export default function OrbTacticalHub({ onBreathingChange }: OrbTacticalHubProp
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isActive]);
+  }, [isActive, onBreathingChange]);
 
   // Box-Breathing pacer loop (4s Inhale, 4s Hold, 4s Exhale, 4s Hold)
   useEffect(() => {
-    let breathTimer: any = null;
-    if (isActive) {
-      if (onBreathingChange) onBreathingChange(true);
-      breathTimer = setInterval(() => {
-        setBreathCounter((prev) => {
-          if (prev <= 1) {
-            setBreathPhase((current) => {
-              if (current === "INHALE") return "HOLD_IN";
-              if (current === "HOLD_IN") return "EXHALE";
-              if (current === "EXHALE") return "HOLD_OUT";
-              return "INHALE";
-            });
-            return 4;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (onBreathingChange) onBreathingChange(false);
+    if (!isActive) return;
+    onBreathingChange?.(true);
+
+    const breathTimer = setInterval(() => {
+      setBreathCounter((prev) => {
+        if (prev <= 1) {
+          setBreathPhase((current) => {
+            if (current === "INHALE") return "HOLD_IN";
+            if (current === "HOLD_IN") return "EXHALE";
+            if (current === "EXHALE") return "HOLD_OUT";
+            return "INHALE";
+          });
+          return 4;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(breathTimer);
+      onBreathingChange?.(false);
       setBreathCounter(4);
       setBreathPhase("INHALE");
-    }
-    return () => clearInterval(breathTimer);
-  }, [isActive]);
+    };
+  }, [isActive, onBreathingChange]);
 
   const toggleSprint = () => {
     const nextState = !isActive;

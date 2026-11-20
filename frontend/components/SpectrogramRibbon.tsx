@@ -51,7 +51,7 @@ export default function SpectrogramRibbon() {
     updateTimeCursor();
     const interval = setInterval(updateTimeCursor, 60_000);
     return () => clearInterval(interval);
-  }, [refreshNightlyBriefing]);
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

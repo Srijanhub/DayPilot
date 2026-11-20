@@ -29,7 +29,7 @@ export default function ActiveTabMonitorPanel() {
   // Load live tab and history state on mount
   useEffect(() => {
     refreshLiveTab();
-  }, [refreshLiveTab]);
+  }, []);
 
   // Default to recent Opera GX tabs only once on initial mount if browser extension is not reporting
   useEffect(() => {

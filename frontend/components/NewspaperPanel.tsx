@@ -25,7 +25,7 @@ export default function NewspaperPanel() {
   // Load the cached digest on mount; the WebSocket pushes updates after that
   useEffect(() => {
     loadNews();
-  }, [loadNews]);
+  }, []);
 
   // Keep "5m ago" labels honest without hitting the backend
   useEffect(() => {
